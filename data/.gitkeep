@@ -1,0 +1,2 @@
+# This file exists to ensure the data directory is tracked by git
+# The actual database (brrr.db) is gitignored
