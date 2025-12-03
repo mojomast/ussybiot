@@ -5,7 +5,76 @@ This document tracks the latest development session, including new project manag
 
 ---
 
-## Summary of Latest Changes (December 3, 2025)
+## Summary of Latest Changes (December 3, 2025 - Session 3)
+
+### Multi-Round Tool Call Memory Fix (CRITICAL)
+
+**Problem Identified:** When users requested complex multi-step operations (e.g., "create a project with 5 tasks, assign them, and add notes"), the bot would go into an infinite loop, creating multiple projects instead of just one. It was creating 7+ projects for a single request!
+
+**Root Cause:** The `chat_with_tool_results()` function was only passing the CURRENT round's tool calls and results to the LLM. The model had no memory of previous rounds, so it kept "forgetting" that it had already created a project.
+
+**Solution Implemented:**
+
+#### Full Tool History Tracking
+- `src/llm.py` - Modified `chat_with_tool_results()` to accept `all_tool_history` parameter containing complete history of all tool rounds
+- `src/cogs/chat.py` - Now accumulates all tool calls and results into `tool_history` list and passes it to LLM each round
+- The LLM now sees the FULL conversation: Round 1 (create project) → Round 2 (create tasks) → Round 3 (assign) → etc.
+
+#### Tool Result Message Improvements
+- `create_project` now returns "SUCCESS: Project created with ID X. DO NOT create another project."
+- `create_task` returns "SUCCESS: Task created with ID X in project Y."
+- `assign_task` returns "SUCCESS: Task X assigned to user."
+- `add_task_note` returns "SUCCESS: Note added to task X."
+
+#### Enhanced Prompt Efficiency Rules
+Added critical efficiency rules to the system prompt:
+1. NEVER create the same thing twice
+2. Track IDs from tool results
+3. Call tools in parallel when possible
+4. When you see "SUCCESS", that action is DONE
+5. After ALL actions complete, STOP and give a summary
+6. Includes a concrete workflow example
+
+#### Other Fixes
+- Fixed Discord modal placeholder too long error (persona set command)
+- Fixed mention stripping to only remove BOT's mention, preserving user mentions
+- `assign_task` and `get_user_tasks` now auto-extract numeric IDs from `<@USER_ID>` format
+- Database migration added for `assigned_to` column on existing databases
+- Max tool rounds set to 20 (sufficient with full history)
+
+---
+
+## Summary of Latest Changes (December 3, 2025 - Session 2)
+
+### Discord Mention Handling & User ID Resolution
+
+**Problem Identified:** When users mentioned others with `@username` (e.g., "assign task to @Mirrowel"), the bot wasn't automatically extracting user IDs from Discord mentions. Users had to manually provide numeric IDs, which was confusing.
+
+**Solution Implemented:**
+
+#### Enhanced Prompt Instructions
+- **Discord mention format documentation**: Bot now understands that `<@USER_ID>` format contains the actual numeric user ID
+- **Extraction instructions**: Clear guidance on parsing `<@123456789>` patterns to extract user IDs
+- **Full tool documentation**: All available tools are now listed in the system prompt with their parameters
+
+#### New Member Lookup Tools
+When users reference someone by name without an @mention, the bot can now look them up:
+- `lookup_guild_member` - Search for a user by username/display name, returns their ID
+- `get_guild_members` - List guild members (useful for random selection when requested)
+
+#### Updated Tool Schemas
+- `assign_task` - Enhanced description explaining mention format and user_id extraction
+- `get_user_tasks` - Enhanced description with user_id format examples
+
+#### Code Changes
+- `src/prompts.py` - Added comprehensive Discord mention handling instructions and full tool documentation to CHAT_CAPABILITIES
+- `src/tool_schemas.py` - Added LOOKUP_GUILD_MEMBER_SCHEMA and GET_GUILD_MEMBERS_SCHEMA, updated assign_task and get_user_tasks descriptions
+- `src/tools.py` - Added `_lookup_guild_member()` and `_get_guild_members()` implementations
+- `src/cogs/chat.py` - Now passes `guild` object in tool context for member lookup
+
+---
+
+## Summary of Latest Changes (December 3, 2025 - Session 1)
 
 ### New Project Management Features
 
@@ -59,10 +128,12 @@ This document tracks the latest development session, including new project manag
 ---
 
 ## Files Modified
-- `src/database.py` — Added assigned_to field to tasks, added project_notes and task_notes tables, added all related CRUD methods
-- `src/tool_schemas.py` — Added schemas for task assignment, notes, and GitHub integration tools
-- `src/tools.py` — Added execution logic for all new tools (task assignment, notes, GitHub operations)
-- `requirements.txt` — Added PyGithub>=2.1.0 for GitHub API integration
+- `src/llm.py` — Added `all_tool_history` parameter to `chat_with_tool_results()` for full context preservation across tool rounds
+- `src/cogs/chat.py` — Accumulates tool history and passes to LLM; fixed mention stripping to preserve user mentions; fixed modal placeholder length
+- `src/prompts.py` — Enhanced CHAT_CAPABILITIES with efficiency rules, workflow examples, and Discord mention handling
+- `src/tools.py` — Improved tool result messages with SUCCESS prefix; auto-extract user IDs from mention format
+- `src/tool_schemas.py` — Added member lookup schemas, improved tool descriptions
+- `src/database.py` — Added migration for `assigned_to` column, project_notes and task_notes tables
 
 ---
 

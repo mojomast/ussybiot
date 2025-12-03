@@ -53,6 +53,12 @@ class ToolExecutor:
             elif tool_name == "get_user_tasks":
                 return await self._get_user_tasks(context.get("guild_id"), tool_args.get("user_id"), tool_args.get("include_done", False))
             
+            # Member lookup tools
+            elif tool_name == "lookup_guild_member":
+                return await self._lookup_guild_member(context.get("guild"), tool_args.get("username"))
+            elif tool_name == "get_guild_members":
+                return await self._get_guild_members(context.get("guild"), tool_args.get("limit", 20))
+            
             # Idea tools
             elif tool_name == "add_idea":
                 return await self._add_idea(context.get("guild_id"), context.get("user_id"), tool_args.get("title"), tool_args.get("description"))
@@ -119,7 +125,7 @@ class ToolExecutor:
             description=description,
             owners=[user_id] if user_id else []
         )
-        return f"Project '{title}' created successfully! ID: {project_id}. You can now add tasks to this project using create_task with project_id={project_id}."
+        return f"SUCCESS: Project '{title}' created with ID {project_id}. Use project_id={project_id} for all tasks. DO NOT create another project."
 
     async def _get_project_info(self, project_id: int) -> str:
         if not project_id:
@@ -175,7 +181,7 @@ class ToolExecutor:
             return f"Error: Project with ID {project_id} not found."
             
         task_id = await self.db.create_task(project_id, label, created_by=user_id)
-        return f"Task created successfully! ID: {task_id}"
+        return f"SUCCESS: Task '{label}' created with ID {task_id} in project {project_id}."
 
     async def _get_tasks(self, project_id: int) -> str:
         if not project_id:
@@ -268,18 +274,26 @@ class ToolExecutor:
         if not task_id or not user_id:
             return "Error: Missing task_id or user_id"
         
+        # Extract numeric ID from mention format if needed
+        # Handles: "123456", "<@123456>", "<@!123456>"
+        import re
+        user_id_str = str(user_id).strip()
+        mention_match = re.match(r'<@!?(\d+)>', user_id_str)
+        if mention_match:
+            user_id_str = mention_match.group(1)
+        
         # Convert user_id to int
         try:
-            user_id_int = int(user_id)
+            user_id_int = int(user_id_str)
         except (ValueError, TypeError):
-            return f"Error: Invalid user_id format: {user_id}"
+            return f"Error: Invalid user_id format: {user_id}. Please provide a numeric Discord user ID or use @mention."
         
         task = await self.db.get_task(task_id)
         if not task:
             return f"Error: Task with ID {task_id} not found."
         
         await self.db.assign_task(task_id, user_id_int)
-        return f"Task '{task['label']}' has been assigned to user <@{user_id_int}>."
+        return f"SUCCESS: Task {task_id} assigned to <@{user_id_int}>."
 
     async def _unassign_task(self, task_id: int) -> str:
         if not task_id:
@@ -299,11 +313,18 @@ class ToolExecutor:
         if not guild_id or not user_id:
             return "Error: Missing guild_id or user_id"
         
+        # Extract numeric ID from mention format if needed
+        import re
+        user_id_str = str(user_id).strip()
+        mention_match = re.match(r'<@!?(\d+)>', user_id_str)
+        if mention_match:
+            user_id_str = mention_match.group(1)
+        
         # Convert user_id to int
         try:
-            user_id_int = int(user_id)
+            user_id_int = int(user_id_str)
         except (ValueError, TypeError):
-            return f"Error: Invalid user_id format: {user_id}"
+            return f"Error: Invalid user_id format: {user_id}. Please provide a numeric Discord user ID."
         
         tasks = await self.db.get_user_tasks(guild_id, user_id_int, include_done)
         
@@ -325,6 +346,64 @@ class ToolExecutor:
         return "\n".join(result)
 
     # =========================================================================
+    # MEMBER LOOKUP TOOL IMPLEMENTATIONS
+    # =========================================================================
+
+    async def _lookup_guild_member(self, guild, username: str) -> str:
+        """Look up a guild member by username or display name."""
+        if not guild:
+            return "Error: No guild context available"
+        if not username:
+            return "Error: Missing username to search for"
+        
+        # Clean up the username (remove @ if present)
+        search_name = username.strip().lstrip('@').lower()
+        
+        # Search through guild members
+        matching_members = []
+        for member in guild.members:
+            # Check username, display name, and global name
+            if (search_name in member.name.lower() or 
+                search_name in member.display_name.lower() or
+                (member.global_name and search_name in member.global_name.lower())):
+                matching_members.append(member)
+        
+        if not matching_members:
+            return f"No members found matching '{username}'. Try using an @mention instead."
+        
+        if len(matching_members) == 1:
+            member = matching_members[0]
+            return f"Found user: {member.display_name} (username: {member.name}, ID: {member.id}). Use user_id '{member.id}' for task assignment."
+        
+        # Multiple matches - list them
+        result = [f"Found {len(matching_members)} members matching '{username}':"]
+        for member in matching_members[:10]:  # Limit to 10 results
+            result.append(f"  - {member.display_name} (@{member.name}) - ID: {member.id}")
+        
+        if len(matching_members) > 10:
+            result.append(f"  ... and {len(matching_members) - 10} more")
+        
+        result.append("\nPlease be more specific or ask the user to use an @mention.")
+        return "\n".join(result)
+
+    async def _get_guild_members(self, guild, limit: int = 20) -> str:
+        """Get a list of guild members (useful for random selection)."""
+        if not guild:
+            return "Error: No guild context available"
+        
+        # Filter out bots and limit results
+        members = [m for m in guild.members if not m.bot][:limit]
+        
+        if not members:
+            return "No members found in this guild."
+        
+        result = [f"**Guild Members ({len(members)} shown):**"]
+        for member in members:
+            result.append(f"  - {member.display_name} (@{member.name}) - ID: {member.id}")
+        
+        return "\n".join(result)
+
+    # =========================================================================
     # NOTES TOOL IMPLEMENTATIONS
     # =========================================================================
 
@@ -340,7 +419,7 @@ class ToolExecutor:
             return f"Error: Project with ID {project_id} not found."
         
         note_id = await self.db.add_project_note(project_id, author_id, content)
-        return f"Note added to project '{project['title']}' (Note ID: {note_id})"
+        return f"SUCCESS: Note added to project {project_id}."
 
     async def _get_project_notes(self, project_id: int) -> str:
         if not project_id:
@@ -374,7 +453,7 @@ class ToolExecutor:
             return f"Error: Task with ID {task_id} not found."
         
         note_id = await self.db.add_task_note(task_id, author_id, content)
-        return f"Note added to task '{task['label']}' (Note ID: {note_id})"
+        return f"SUCCESS: Note added to task {task_id}."
 
     async def _get_task_notes(self, task_id: int) -> str:
         if not task_id:

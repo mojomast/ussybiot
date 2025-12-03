@@ -320,7 +320,8 @@ class LLMClient:
         conversation_context: List[Dict[str, str]] = None,
         temperature: float = 0.7,
         max_tokens: int = 12000,
-        tools: Optional[List[Dict]] = None
+        tools: Optional[List[Dict]] = None,
+        all_tool_history: Optional[List[Dict]] = None
     ) -> LLMResponse:
         """Send a follow-up chat request after tool execution.
         
@@ -329,8 +330,8 @@ class LLMClient:
         
         Args:
             user_message: The original user message
-            assistant_tool_calls: The tool_calls from the assistant's response
-            tool_results: List of {tool_call_id, name, result} dicts
+            assistant_tool_calls: The tool_calls from the assistant's response (current round)
+            tool_results: List of {tool_call_id, name, result} dicts (current round)
             user_memories: Dict of user's stored memories
             user_name: Display name of the user
             custom_instructions: Custom persona instructions
@@ -338,6 +339,7 @@ class LLMClient:
             temperature: LLM temperature
             max_tokens: Max tokens for response
             tools: List of tool schemas
+            all_tool_history: Full history of all tool rounds [{tool_calls, results}, ...]
         """
         
         system_prompt = self._build_system_prompt(
@@ -351,17 +353,39 @@ class LLMClient:
         messages = [
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_message},
-            {"role": "assistant", "content": "", "tool_calls": assistant_tool_calls}
         ]
         
-        # Add tool results
-        for tr in tool_results:
+        # Add all previous tool rounds if provided (maintains full context)
+        if all_tool_history:
+            for round_data in all_tool_history:
+                # Add assistant's tool calls
+                messages.append({
+                    "role": "assistant", 
+                    "content": "", 
+                    "tool_calls": round_data["tool_calls"]
+                })
+                # Add tool results
+                for tr in round_data["results"]:
+                    messages.append({
+                        "role": "tool",
+                        "tool_call_id": tr["tool_call_id"],
+                        "name": tr["name"],
+                        "content": tr["result"]
+                    })
+        else:
+            # Fallback: just current round (legacy behavior)
             messages.append({
-                "role": "tool",
-                "tool_call_id": tr["tool_call_id"],
-                "name": tr["name"],
-                "content": tr["result"]
+                "role": "assistant", 
+                "content": "", 
+                "tool_calls": assistant_tool_calls
             })
+            for tr in tool_results:
+                messages.append({
+                    "role": "tool",
+                    "tool_call_id": tr["tool_call_id"],
+                    "name": tr["name"],
+                    "content": tr["result"]
+                })
         
         payload = {
             "model": self.model,

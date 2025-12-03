@@ -114,10 +114,11 @@ class Chat(commands.Cog):
                 
                 logger.debug(f"Filtered history: {len(raw_history)} -> {len(history)} messages")
                 
-                # Clean the message content (remove bot mention)
+                # Clean the message content (remove only the BOT's mention, keep user mentions)
                 content = message.content
-                for mention in message.mentions:
-                    content = content.replace(f'<@{mention.id}>', '').replace(f'<@!{mention.id}>', '')
+                # Only remove the bot's own mention, preserve other user mentions
+                bot_id = self.bot.user.id
+                content = content.replace(f'<@{bot_id}>', '').replace(f'<@!{bot_id}>', '')
                 content = content.strip()
                 
                 if not content:
@@ -144,11 +145,10 @@ class Chat(commands.Cog):
                 
                 # Handle tool calls with multi-round support
                 # The LLM may return tool calls that, when executed, lead to more tool calls
-                # We loop until we get a final text response (max 5 rounds to prevent infinite loops)
-                max_tool_rounds = 5
+                # We loop until we get a final text response (max 20 rounds - should be enough with full history)
+                max_tool_rounds = 20
                 tool_round = 0
-                all_tool_calls = []  # Track all tool calls for building message history
-                all_tool_results = []  # Track all results
+                tool_history = []  # Track ALL tool rounds for context
                 
                 while response.tool_calls and tool_round < max_tool_rounds:
                     tool_round += 1
@@ -169,7 +169,7 @@ class Chat(commands.Cog):
                         tool_result = await tool_executor.execute_tool(
                             function_name, 
                             arguments, 
-                            context={"guild_id": guild_id, "user_id": user_id}
+                            context={"guild_id": guild_id, "user_id": user_id, "guild": message.guild}
                         )
                         
                         current_tool_results.append({
@@ -178,11 +178,13 @@ class Chat(commands.Cog):
                             "result": tool_result
                         })
                     
-                    # Accumulate for history
-                    all_tool_calls.append(current_tool_calls)
-                    all_tool_results.append(current_tool_results)
+                    # Add this round to history
+                    tool_history.append({
+                        "tool_calls": current_tool_calls,
+                        "results": current_tool_results
+                    })
                     
-                    # Send tool results back to LLM
+                    # Send tool results back to LLM with FULL history
                     response = await self.llm.chat_with_tool_results(
                         user_message=content,
                         assistant_tool_calls=current_tool_calls,
@@ -191,7 +193,8 @@ class Chat(commands.Cog):
                         user_name=user_name,
                         custom_instructions=custom_instructions,
                         conversation_context=history if history else None,
-                        tools=TOOLS_SCHEMA
+                        tools=TOOLS_SCHEMA,
+                        all_tool_history=tool_history  # Pass full history!
                     )
                 
                 if tool_round >= max_tool_rounds and response.tool_calls:
@@ -475,7 +478,7 @@ class Chat(commands.Cog):
             instructions = discord.ui.TextInput(
                 label="Custom Instructions",
                 style=discord.TextStyle.paragraph,
-                placeholder="Examples:\n- Be more concise\n- Explain things like I'm a beginner\n- Focus on Python/Rust/etc\n- Use more technical language\n- Be extra encouraging",
+                placeholder="E.g.: Be concise, explain like I'm a beginner, focus on Python...",
                 max_length=1000,
                 required=True,
                 default=current or ""

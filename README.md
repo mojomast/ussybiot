@@ -36,10 +36,17 @@ BRRR Bot is a Discord bot that goes **BRRRRRRRR** — fast, efficient, and high-
 
 ## New Features (Dec 3, 2025) 🎉
 
+### Multi-Step Tool Operations (Latest!)
+- **Full context preservation**: The bot now remembers ALL previous tool calls when handling complex requests
+- **Parallel tool execution**: Create multiple tasks, add multiple notes, assign multiple users - all in one request
+- **Smart completion**: Bot stops when the job is done instead of going in circles
+- **Example**: "Create a project with 5 tasks and assign them to @Alice and @Bob" now works perfectly!
+
 ### Task Assignment & Collaboration
 - **Assign tasks to users**: Keep track of who's responsible for what
 - **View user tasks**: See all tasks assigned to you or anyone else
 - **Unassign tasks**: Remove task assignments when plans change
+- **Smart mention parsing**: Just @mention users - the bot extracts IDs automatically
 
 ### Notes System
 - **Project notes**: Document decisions, updates, and important information
@@ -54,9 +61,30 @@ BRRR Bot is a Discord bot that goes **BRRRRRRRR** — fast, efficient, and high-
 - **Branch management**: List branches and manage your GitHub workflow
 - **PR tracking**: View open, closed, or all pull requests
 
+### Member Lookup
+- **Find users by name**: When someone forgets to @mention, the bot can look up users
+- **Random assignment**: Ask the bot to pick random team members for tasks
+
 ---
 
-## Previous Updates (Dec 3, 2025) ✅
+## Technical Improvements (Dec 3, 2025) 🔧
+
+### Multi-Round Tool Call Context Fix
+The bot now maintains full context across tool calling rounds. Previously, complex requests like "create a project with 5 tasks and assign them" would cause the bot to loop endlessly because it "forgot" what it had already done. Now:
+
+- All tool calls and results are accumulated into a `tool_history` list
+- Each round, the LLM receives the COMPLETE history of all previous actions
+- Tool results include clear "SUCCESS" indicators to prevent retry loops
+- Efficiency rules in the prompt guide the LLM to stop when done
+
+### Mention Handling
+- User mentions (`<@USER_ID>`) are now preserved in messages to the LLM
+- Tool functions auto-extract numeric IDs from mention format
+- Member lookup tools allow finding users by name when mentions aren't used
+
+---
+
+## Previous Updates ✅
 
 This release consolidates the bot's system prompts and tool schemas into centralized files and adds several enhancements to tool handling and management, improving maintainability and user experience.
 

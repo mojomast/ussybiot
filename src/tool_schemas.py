@@ -255,7 +255,7 @@ ASSIGN_TASK_SCHEMA = {
     "type": "function",
     "function": {
         "name": "assign_task",
-        "description": "Assign a task to a specific user.",
+        "description": "Assign a task to a specific user. Extract the user_id from Discord mentions - when a user is @mentioned, it appears as <@USER_ID> in the message. Use ONLY the numeric ID.",
         "parameters": {
             "type": "object",
             "properties": {
@@ -265,7 +265,7 @@ ASSIGN_TASK_SCHEMA = {
                 },
                 "user_id": {
                     "type": "string",
-                    "description": "The Discord user ID to assign the task to"
+                    "description": "The Discord user ID (numeric string extracted from <@USER_ID> mention format). Example: '123456789012345678'"
                 }
             },
             "required": ["task_id", "user_id"]
@@ -295,13 +295,13 @@ GET_USER_TASKS_SCHEMA = {
     "type": "function",
     "function": {
         "name": "get_user_tasks",
-        "description": "Get all tasks assigned to a specific user in the current guild.",
+        "description": "Get all tasks assigned to a specific user in the current guild. Extract user_id from Discord mentions (<@USER_ID>).",
         "parameters": {
             "type": "object",
             "properties": {
                 "user_id": {
                     "type": "string",
-                    "description": "The Discord user ID to get tasks for"
+                    "description": "The Discord user ID (numeric string extracted from <@USER_ID> mention). Example: '123456789012345678'"
                 },
                 "include_done": {
                     "type": "boolean",
@@ -309,6 +309,42 @@ GET_USER_TASKS_SCHEMA = {
                 }
             },
             "required": ["user_id"]
+        }
+    }
+}
+
+LOOKUP_GUILD_MEMBER_SCHEMA = {
+    "type": "function",
+    "function": {
+        "name": "lookup_guild_member",
+        "description": "Look up a guild member by their username or display name when you don't have a Discord mention with their ID. Returns the user's ID and display name. Use this when a user references someone by name without using @mention.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "username": {
+                    "type": "string",
+                    "description": "The username or display name to search for (case-insensitive)"
+                }
+            },
+            "required": ["username"]
+        }
+    }
+}
+
+GET_GUILD_MEMBERS_SCHEMA = {
+    "type": "function",
+    "function": {
+        "name": "get_guild_members",
+        "description": "Get a list of guild members. Use this when you need to pick a random user or show available members for task assignment.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "limit": {
+                    "type": "integer",
+                    "description": "Maximum number of members to return (default: 20)"
+                }
+            },
+            "required": []
         }
     }
 }
@@ -588,6 +624,10 @@ TOOLS_SCHEMA: List[Dict[str, Any]] = [
     ASSIGN_TASK_SCHEMA,
     UNASSIGN_TASK_SCHEMA,
     GET_USER_TASKS_SCHEMA,
+    
+    # Member lookup (for resolving usernames to IDs)
+    LOOKUP_GUILD_MEMBER_SCHEMA,
+    GET_GUILD_MEMBERS_SCHEMA,
     
     # Idea management
     ADD_IDEA_SCHEMA,

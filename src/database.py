@@ -125,6 +125,13 @@ class Database:
                 )
             """)
             
+            # Migration: Add assigned_to column to tasks if it doesn't exist
+            # This handles existing databases that were created before this column was added
+            try:
+                await db.execute("ALTER TABLE tasks ADD COLUMN assigned_to INTEGER")
+            except Exception:
+                pass  # Column already exists, ignore
+            
             await db.commit()
     
     # ============ PROJECT METHODS ============
