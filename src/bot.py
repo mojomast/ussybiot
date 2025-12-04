@@ -1145,6 +1145,12 @@ async def menu_command(interaction: discord.Interaction):
     await interaction.response.send_message(embed=embed, view=view)
 
 
+@bot.tree.command(name="commands", description="Show all available commands (alias for /help)")
+async def commands_alias(interaction: discord.Interaction):
+    """Alias for /help - show all commands"""
+    await help_command(interaction)
+
+
 @bot.tree.command(name="help", description="Show all available commands")
 async def help_command(interaction: discord.Interaction):
     embed = discord.Embed(
@@ -1170,6 +1176,11 @@ async def help_command(interaction: discord.Interaction):
 `/project checklist list` - View tasks with filter buttons
 `/project checklist toggle` - Mark task complete/incomplete
 `/project checklist remove` - Delete a task
+`/project task details` - View detailed task with notes
+`/project task assign` - Assign task to a user
+`/project task unassign` - Remove task assignment
+`/project my-tasks pending` - View your pending tasks
+`/project my-tasks all` - View all your tasks
         """,
         inline=False
     )
@@ -1178,7 +1189,7 @@ async def help_command(interaction: discord.Interaction):
         name="📅 Weekly Commands",
         value="""
 `/week start` - Start a new week with project overview
-`/week stats` - Interactive stats dashboard with filtering 🎯 NEW
+`/week stats` - Interactive stats dashboard with filtering 🎯
 `/week summary` - Quick progress summary
 `/week retro` - Run project retrospective
         """,
@@ -1213,6 +1224,7 @@ async def help_command(interaction: discord.Interaction):
         name="🧠 Memory Commands",
         value="""
 `/memory show` - See what I remember about you
+`/memory add` - Manually add a memory
 `/memory forget` - Make me forget something
 `/memory clear` - Clear all your memories
         """,
@@ -1220,9 +1232,13 @@ async def help_command(interaction: discord.Interaction):
     )
     
     embed.add_field(
-        name="⚙️ Admin Commands",
+        name="⚙️ Utility Commands",
         value="""
-`/model` - Change the LLM model (admin only)
+`/ping` - Check bot latency
+`/brrr` - Bot status and info
+`/menu` - Interactive feature menu
+`/commands` - Alias for this help command
+`/model` - Change LLM model (admin only)
         """,
         inline=False
     )
@@ -1246,7 +1262,7 @@ async def help_command(interaction: discord.Interaction):
         inline=False
     )
     
-    embed.set_footer(text="Let's make your projects go brrrrrr! 🏎️ | Powered by gpt-5-nano")
+    embed.set_footer(text="Let's make your projects go brrrrrr! 🏎️ | Use /menu for interactive navigation")
     await interaction.response.send_message(embed=embed)
 
 

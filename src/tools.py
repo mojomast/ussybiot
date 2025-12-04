@@ -77,6 +77,22 @@ class ToolExecutor:
             elif tool_name == "get_task_notes":
                 return await self._get_task_notes(tool_args.get("task_id"))
             
+            # Project/Task update tools
+            elif tool_name == "update_project":
+                return await self._update_project(tool_args.get("project_id"), tool_args.get("title"), tool_args.get("description"), tool_args.get("status"))
+            elif tool_name == "update_task":
+                return await self._update_task(tool_args.get("task_id"), tool_args.get("label"), tool_args.get("priority"))
+            elif tool_name == "mark_idea_used":
+                return await self._mark_idea_used(tool_args.get("idea_id"), tool_args.get("project_id"))
+            
+            # Memory management tools
+            elif tool_name == "save_memory":
+                return await self._save_memory(context.get("guild_id"), context.get("user_id"), tool_args.get("key"), tool_args.get("value"), tool_args.get("context"))
+            elif tool_name == "get_user_memories":
+                return await self._get_user_memories(context.get("guild_id"), context.get("user_id"), tool_args.get("user_id"))
+            elif tool_name == "delete_memory":
+                return await self._delete_memory(context.get("guild_id"), context.get("user_id"), tool_args.get("key"))
+            
             # GitHub tools
             elif tool_name == "github_list_files":
                 return await self._github_list_files(tool_args.get("repo"), tool_args.get("path", ""), tool_args.get("branch"))
@@ -694,3 +710,140 @@ class ToolExecutor:
         except Exception as e:
             logger.error(f"GitHub list PRs error: {e}", exc_info=True)
             return f"Error listing pull requests: {str(e)}"
+
+    # =========================================================================
+    # PROJECT/TASK UPDATE TOOL IMPLEMENTATIONS
+    # =========================================================================
+
+    async def _update_project(self, project_id: int, title: str = None, description: str = None, status: str = None) -> str:
+        if not project_id:
+            return "Error: Missing project_id"
+        
+        project = await self.db.get_project(project_id)
+        if not project:
+            return f"Error: Project with ID {project_id} not found."
+        
+        updates = []
+        if title:
+            await self.db.update_project(project_id, title=title)
+            updates.append(f"title → '{title}'")
+        if description:
+            await self.db.update_project(project_id, description=description)
+            updates.append(f"description updated")
+        if status:
+            if status not in ['active', 'paused', 'completed', 'archived']:
+                return f"Error: Invalid status '{status}'. Must be active, paused, completed, or archived."
+            await self.db.update_project(project_id, status=status)
+            updates.append(f"status → '{status}'")
+        
+        if not updates:
+            return "No updates provided. Specify title, description, or status."
+        
+        return f"SUCCESS: Project {project_id} updated: {', '.join(updates)}"
+
+    async def _update_task(self, task_id: int, label: str = None, priority: str = None) -> str:
+        if not task_id:
+            return "Error: Missing task_id"
+        
+        task = await self.db.get_task(task_id)
+        if not task:
+            return f"Error: Task with ID {task_id} not found."
+        
+        updates = []
+        if label:
+            await self.db.update_task(task_id, label=label)
+            updates.append(f"label → '{label}'")
+        if priority:
+            if priority not in ['low', 'medium', 'high', 'critical']:
+                return f"Error: Invalid priority '{priority}'. Must be low, medium, high, or critical."
+            await self.db.update_task(task_id, priority=priority)
+            updates.append(f"priority → '{priority}'")
+        
+        if not updates:
+            return "No updates provided. Specify label or priority."
+        
+        return f"SUCCESS: Task {task_id} updated: {', '.join(updates)}"
+
+    async def _mark_idea_used(self, idea_id: int, project_id: int) -> str:
+        if not idea_id or not project_id:
+            return "Error: Missing idea_id or project_id"
+        
+        idea = await self.db.get_idea(idea_id)
+        if not idea:
+            return f"Error: Idea with ID {idea_id} not found."
+        
+        project = await self.db.get_project(project_id)
+        if not project:
+            return f"Error: Project with ID {project_id} not found."
+        
+        await self.db.mark_idea_used(idea_id, project_id)
+        return f"SUCCESS: Idea '{idea['title']}' marked as used for project '{project['title']}'"
+
+    # =========================================================================
+    # MEMORY MANAGEMENT TOOL IMPLEMENTATIONS
+    # =========================================================================
+
+    async def _save_memory(self, guild_id: int, user_id: int, key: str, value: str, context: str = None) -> str:
+        if not guild_id or not user_id:
+            return "Error: No guild or user context"
+        if not key or not value:
+            return "Error: Missing key or value"
+        
+        # Sanitize key
+        key = key.lower().replace(' ', '_')
+        
+        await self.db.set_memory(
+            user_id=user_id,
+            guild_id=guild_id,
+            key=key,
+            value=value,
+            context=context
+        )
+        return f"SUCCESS: Memory saved - {key} = '{value}'"
+
+    async def _get_user_memories(self, guild_id: int, current_user_id: int, target_user_id: str = None) -> str:
+        if not guild_id:
+            return "Error: No guild context"
+        
+        # Determine which user to get memories for
+        user_id = current_user_id
+        if target_user_id:
+            # Extract numeric ID from mention format if needed
+            import re
+            user_id_str = str(target_user_id).strip()
+            mention_match = re.match(r'<@!?(\d+)>', user_id_str)
+            if mention_match:
+                user_id_str = mention_match.group(1)
+            try:
+                user_id = int(user_id_str)
+            except (ValueError, TypeError):
+                return f"Error: Invalid user_id format: {target_user_id}"
+        
+        memories = await self.db.get_all_memories(user_id, guild_id)
+        
+        if not memories:
+            return f"No memories found for <@{user_id}>."
+        
+        result = [f"**Memories for <@{user_id}>:**"]
+        for key, data in memories.items():
+            if key == 'persona_instructions':
+                continue  # Skip persona instructions in tool output
+            value = data.get('value', data) if isinstance(data, dict) else data
+            context = data.get('context', '') if isinstance(data, dict) else ''
+            context_str = f" ({context})" if context else ""
+            result.append(f"  • {key}: {value}{context_str}")
+        
+        return "\n".join(result)
+
+    async def _delete_memory(self, guild_id: int, user_id: int, key: str) -> str:
+        if not guild_id or not user_id:
+            return "Error: No guild or user context"
+        if not key:
+            return "Error: Missing key"
+        
+        memory = await self.db.get_memory(user_id, guild_id, key)
+        if not memory:
+            return f"Error: Memory with key '{key}' not found."
+        
+        await self.db.delete_memory(user_id, guild_id, key)
+        return f"SUCCESS: Memory '{key}' deleted"

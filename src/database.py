@@ -272,6 +272,19 @@ class Database:
             await db.commit()
             return True
     
+    async def update_task(self, task_id: int, **kwargs) -> bool:
+        """Update task fields (label, priority, etc.)"""
+        if not kwargs:
+            return False
+        
+        set_clause = ", ".join(f"{k} = ?" for k in kwargs.keys())
+        values = list(kwargs.values()) + [task_id]
+        
+        async with aiosqlite.connect(self.db_path) as db:
+            await db.execute(f"UPDATE tasks SET {set_clause} WHERE id = ?", values)
+            await db.commit()
+            return True
+    
     async def assign_task(self, task_id: int, user_id: int) -> bool:
         """Assign a task to a user"""
         async with aiosqlite.connect(self.db_path) as db:

@@ -36,6 +36,14 @@ BRRR Bot is a Discord bot that goes **BRRRRRRRR** — fast, efficient, and high-
 
 ## New Features (Dec 3, 2025) 🎉
 
+### Enhanced Tool Ecosystem 🛠️
+- **32 AI-powered tools** now available (6 new tools added)
+- **Update operations**: `update_project` and `update_task` tools for modifying existing data
+- **Memory management**: `save_memory`, `get_user_memories`, `delete_memory` tools for explicit memory control
+- **Idea tracking**: `mark_idea_used` tool to link ideas to projects when converting them
+- **Full LLM coverage**: All tools documented in system prompts for proper LLM usage
+- **`/commands` alias**: Convenient shortcut to `/help` command for command discovery
+
 ### Interactive Menu System (Latest!) 🎯
 - **`/menu` command**: Visual, button-driven interface to access all bot features
 - **`brrrmenu` trigger**: Type "brrrmenu" in chat to instantly open the menu (no slash command needed!)
@@ -194,23 +202,67 @@ Bot sends response to Discord
 
 ### Available Tools
 
-The LLM can use these tools to interact with your data:
+The LLM can use **32 tools** to interact with your data:
 
+**Project Management (8 tools)**
 | Tool | Description |
 |------|-------------|
 | `get_projects` | List projects (filter by status) |
 | `create_project` | Create a new project |
+| `get_project_info` | Get detailed info about a specific project |
+| `archive_project` | Archive a project when done |
+| `update_project` | Update project title, description, or status ✨ NEW |
 | `create_task` | Add a task to a project checklist |
+| `get_tasks` | Get tasks for a project |
+| `toggle_task` | Mark a task complete/incomplete |
+
+**Task Management (5 tools)**
+| Tool | Description |
+|------|-------------|
+| `delete_task` | Remove a task from a project |
 | `assign_task` | Assign a task to a specific user |
+| `unassign_task` | Remove a task assignment |
 | `get_user_tasks` | Get all tasks assigned to a user |
+| `update_task` | Update task label or priority ✨ NEW |
+
+**Notes (4 tools)**
+| Tool | Description |
+|------|-------------|
 | `add_project_note` | Add a note to a project |
+| `get_project_notes` | Get notes for a project |
 | `add_task_note` | Add a note to a task |
+| `get_task_notes` | Get notes for a task |
+
+**Ideas (4 tools)**
+| Tool | Description |
+|------|-------------|
 | `add_idea` | Save an idea to the idea pool |
 | `get_ideas` | List saved ideas |
+| `delete_idea` | Remove an idea |
+| `mark_idea_used` | Link idea to project when converting ✨ NEW |
+
+**Memory Management (3 tools)** ✨ NEW
+| Tool | Description |
+|------|-------------|
+| `save_memory` | Explicitly save information to memory |
+| `get_user_memories` | Retrieve all stored memories |
+| `delete_memory` | Remove a specific memory |
+
+**GitHub Integration (6 tools)**
+| Tool | Description |
+|------|-------------|
 | `github_list_files` | List files in a GitHub repository |
 | `github_read_file` | Read a file from GitHub |
 | `github_create_pr` | Create a pull request |
 | `github_update_file` | Update/create a file in GitHub |
+| `github_list_branches` | List branches in a repository |
+| `github_list_prs` | List pull requests |
+
+**Utility (2 tools)**
+| Tool | Description |
+|------|-------------|
+| `get_guild_members` | List members in the Discord server |
+| `lookup_guild_member` | Find a member by name |
 
 ### Usage Examples
 

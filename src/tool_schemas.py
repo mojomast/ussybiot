@@ -602,6 +602,168 @@ GITHUB_LIST_PRS_SCHEMA = {
 
 
 # =============================================================================
+# PROJECT UPDATE TOOL
+# =============================================================================
+
+UPDATE_PROJECT_SCHEMA = {
+    "type": "function",
+    "function": {
+        "name": "update_project",
+        "description": "Update a project's title, description, or status.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "project_id": {
+                    "type": "integer",
+                    "description": "The ID of the project to update"
+                },
+                "title": {
+                    "type": "string",
+                    "description": "New title for the project (optional)"
+                },
+                "description": {
+                    "type": "string",
+                    "description": "New description for the project (optional)"
+                },
+                "status": {
+                    "type": "string",
+                    "enum": ["active", "paused", "completed", "archived"],
+                    "description": "New status for the project (optional)"
+                }
+            },
+            "required": ["project_id"]
+        }
+    }
+}
+
+
+# =============================================================================
+# TASK UPDATE TOOL
+# =============================================================================
+
+UPDATE_TASK_SCHEMA = {
+    "type": "function",
+    "function": {
+        "name": "update_task",
+        "description": "Update a task's label or other properties.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "task_id": {
+                    "type": "integer",
+                    "description": "The ID of the task to update"
+                },
+                "label": {
+                    "type": "string",
+                    "description": "New label/description for the task (optional)"
+                },
+                "priority": {
+                    "type": "string",
+                    "enum": ["low", "medium", "high", "critical"],
+                    "description": "Priority level for the task (optional)"
+                }
+            },
+            "required": ["task_id"]
+        }
+    }
+}
+
+
+# =============================================================================
+# MARK IDEA USED TOOL
+# =============================================================================
+
+MARK_IDEA_USED_SCHEMA = {
+    "type": "function",
+    "function": {
+        "name": "mark_idea_used",
+        "description": "Mark an idea as used when it becomes a project. Links the idea to the project ID.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "idea_id": {
+                    "type": "integer",
+                    "description": "The ID of the idea to mark as used"
+                },
+                "project_id": {
+                    "type": "integer",
+                    "description": "The ID of the project created from this idea"
+                }
+            },
+            "required": ["idea_id", "project_id"]
+        }
+    }
+}
+
+
+# =============================================================================
+# MEMORY MANAGEMENT TOOLS
+# =============================================================================
+
+SAVE_MEMORY_SCHEMA = {
+    "type": "function",
+    "function": {
+        "name": "save_memory",
+        "description": "Save a memory about the current user. Use this to remember important information like skills, preferences, project interests, timezone, etc.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "key": {
+                    "type": "string",
+                    "description": "A descriptive key for the memory (e.g., 'skill_python', 'preferred_name', 'timezone', 'current_project')"
+                },
+                "value": {
+                    "type": "string",
+                    "description": "The value to remember"
+                },
+                "context": {
+                    "type": "string",
+                    "description": "Context about why this was remembered (optional)"
+                }
+            },
+            "required": ["key", "value"]
+        }
+    }
+}
+
+GET_USER_MEMORIES_SCHEMA = {
+    "type": "function",
+    "function": {
+        "name": "get_user_memories",
+        "description": "Retrieve all memories stored about a specific user. Useful when you need to recall what you know about someone.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "user_id": {
+                    "type": "string",
+                    "description": "Discord user ID to get memories for. If not provided, gets memories for the current user."
+                }
+            },
+            "required": []
+        }
+    }
+}
+
+DELETE_MEMORY_SCHEMA = {
+    "type": "function",
+    "function": {
+        "name": "delete_memory",
+        "description": "Delete a specific memory about the current user.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "key": {
+                    "type": "string",
+                    "description": "The key of the memory to delete"
+                }
+            },
+            "required": ["key"]
+        }
+    }
+}
+
+
+# =============================================================================
 # AGGREGATE SCHEMA LIST
 # =============================================================================
 # This list is passed to the LLM for function calling.
@@ -613,12 +775,14 @@ TOOLS_SCHEMA: List[Dict[str, Any]] = [
     CREATE_PROJECT_SCHEMA,
     GET_PROJECT_INFO_SCHEMA,
     ARCHIVE_PROJECT_SCHEMA,
+    UPDATE_PROJECT_SCHEMA,
     
     # Task management
     CREATE_TASK_SCHEMA,
     GET_TASKS_SCHEMA,
     TOGGLE_TASK_SCHEMA,
     DELETE_TASK_SCHEMA,
+    UPDATE_TASK_SCHEMA,
     
     # Task assignment
     ASSIGN_TASK_SCHEMA,
@@ -633,12 +797,18 @@ TOOLS_SCHEMA: List[Dict[str, Any]] = [
     ADD_IDEA_SCHEMA,
     GET_IDEAS_SCHEMA,
     DELETE_IDEA_SCHEMA,
+    MARK_IDEA_USED_SCHEMA,
     
     # Notes
     ADD_PROJECT_NOTE_SCHEMA,
     GET_PROJECT_NOTES_SCHEMA,
     ADD_TASK_NOTE_SCHEMA,
     GET_TASK_NOTES_SCHEMA,
+    
+    # Memory management
+    SAVE_MEMORY_SCHEMA,
+    GET_USER_MEMORIES_SCHEMA,
+    DELETE_MEMORY_SCHEMA,
     
     # GitHub integration
     GITHUB_LIST_FILES_SCHEMA,
