@@ -120,6 +120,21 @@ class BrrrBot(commands.Bot):
         logger.info(f'BRRR Bot is online! Logged in as {self.user}')
         logger.info(f'Connected to {len(self.guilds)} guild(s)')
         
+        # Debug: List all commands in tree
+        all_commands = await self.tree.fetch_commands()
+        logger.info(f"Local tree has {len(all_commands)} commands:")
+        for cmd in all_commands:
+            logger.info(f"  - /{cmd.name}")
+        
+        # For development: force sync to all guilds to bypass cache
+        for guild in self.guilds:
+            try:
+                logger.info(f"Syncing commands to guild {guild.name}...")
+                synced = await self.tree.sync(guild=guild)
+                logger.info(f"Successfully synced {len(synced)} commands to {guild.name}")
+            except Exception as e:
+                logger.error(f"Failed to sync to guild {guild.name}: {e}")
+        
         # Set presence
         await self.change_presence(
             activity=discord.Activity(
@@ -179,6 +194,195 @@ class BrrrBot(commands.Bot):
 bot = BrrrBot()
 
 
+# Admin user IDs (Discord user IDs)
+ADMIN_USERS = {
+    1000449836886020159,  # @ussy
+}
+
+# Model command password
+MODEL_PASSWORD = "platypus"
+
+
+class PasswordModal(discord.ui.Modal, title="Enter Password"):
+    """Modal for password authentication"""
+    
+    password_input = discord.ui.TextInput(
+        label="Password",
+        placeholder="Enter the password to manage models",
+        max_length=100,
+        required=True
+    )
+    
+    async def on_submit(self, interaction: discord.Interaction):
+        # Verify password
+        if self.password_input.value == MODEL_PASSWORD:
+            self.result = True
+        else:
+            self.result = False
+        await interaction.response.defer()
+
+
+class ModelSelectView(discord.ui.View):
+    """View for selecting LLM model from dynamically fetched list"""
+    
+    def __init__(self, bot, models: list):
+        super().__init__(timeout=300)
+        self.bot = bot
+        self.models = models
+        
+        # Create buttons for each model (limit to 25 due to Discord limits)
+        for i, model in enumerate(models[:25]):
+            model_id = model.get('id', '')
+            model_name = model.get('name', model_id)
+            
+            # Determine button style based on current model
+            try:
+                is_current = bot.llm and bot.llm.model == model_id
+            except Exception as e:
+                logger.warning(f"Error checking current model: {e}")
+                is_current = False
+            
+            button = discord.ui.Button(
+                label=model_name[:80],
+                style=discord.ButtonStyle.success if is_current else discord.ButtonStyle.primary,
+                custom_id=f"model_{i}"
+            )
+            button.callback = self._make_model_callback(model_id, model_name, i)
+            self.add_item(button)
+    
+    def _make_model_callback(self, model_id: str, model_name: str, index: int):
+        async def callback(interaction: discord.Interaction):
+            # Prompt for password
+            modal = PasswordModal()
+            await interaction.response.send_modal(modal)
+            
+            # Wait for modal submission
+            try:
+                await modal.wait()
+            except:
+                return
+            
+            # Check password
+            if not hasattr(modal, 'result') or not modal.result:
+                await interaction.followup.send(
+                    "❌ Incorrect password!",
+                    ephemeral=True
+                )
+                return
+            
+            # Change the model
+            self.bot.llm.model = model_id
+            logger.info(f"Model changed to {model_id} by {interaction.user}")
+            
+            # Update button styles
+            for i, item in enumerate(self.children):
+                if isinstance(item, discord.ui.Button):
+                    if i == index:
+                        item.style = discord.ButtonStyle.success
+                    else:
+                        item.style = discord.ButtonStyle.primary
+            
+            embed = discord.Embed(
+                title="✅ Model Changed",
+                description=f"LLM model is now: **{model_name}**",
+                color=discord.Color.green()
+            )
+            embed.add_field(
+                name="Model ID",
+                value=f"`{model_id}`",
+                inline=False
+            )
+            
+            await interaction.response.edit_message(embed=embed, view=self)
+            
+            # Announce in the channel
+            await interaction.followup.send(
+                f"🔄 Bot's LLM model changed to: **{model_name}**"
+            )
+        
+        return callback
+
+
+@bot.tree.command(name="model", description="Change the LLM model")
+async def model_command(interaction: discord.Interaction):
+    """Let users choose which LLM model to use (password protected)"""
+    
+    # Prompt for password
+    modal = PasswordModal()
+    await interaction.response.send_modal(modal)
+    
+    # Wait for modal submission
+    try:
+        await modal.wait()
+    except:
+        return
+    
+    # Check password
+    if not hasattr(modal, 'result') or not modal.result:
+        await interaction.followup.send(
+            "❌ Incorrect password!",
+            ephemeral=True
+        )
+        return
+    
+    # Check if LLM is initialized
+    if not bot.llm:
+        await interaction.followup.send(
+            "❌ LLM not initialized! Check REQUESTY_API_KEY in .env",
+            ephemeral=True
+        )
+        return
+    
+    try:
+        # Fetch available models from API
+        models = await bot.llm.get_available_models()
+        
+        if not models:
+            await interaction.followup.send(
+                "❌ Failed to fetch available models from the API. Please try again later."
+            )
+            return
+        
+        embed = discord.Embed(
+            title="🤖 LLM Model Selection",
+            description=f"Choose from {len(models)} available model(s):",
+            color=discord.Color.blue()
+        )
+        
+        # Show current model
+        current_model = bot.llm.model if bot.llm else "None"
+        embed.add_field(
+            name="📍 Current Model",
+            value=f"`{current_model}`",
+            inline=False
+        )
+        
+        # Show available models (first 10 in embed, all in buttons)
+        model_list = "\n".join([
+            f"• `{m.get('id', m.get('name'))}`"
+            for m in models[:10]
+        ])
+        if len(models) > 10:
+            model_list += f"\n... and {len(models) - 10} more"
+        
+        embed.add_field(
+            name="📚 Available Models",
+            value=model_list,
+            inline=False
+        )
+        
+        embed.set_footer(text="Click a button to select a model")
+        
+        view = ModelSelectView(bot, models)
+        await interaction.followup.send(embed=embed, view=view)
+    except Exception as e:
+        logger.error(f"Error in model command: {e}", exc_info=True)
+        await interaction.followup.send(
+            f"❌ Error: {str(e)}"
+        )
+
+
+
 # Simple ping command for testing
 @bot.tree.command(name="ping", description="Check if the bot is alive")
 async def ping(interaction: discord.Interaction):
@@ -209,18 +413,21 @@ async def brrr_status(interaction: discord.Interaction):
 async def help_command(interaction: discord.Interaction):
     embed = discord.Embed(
         title="🚀 BRRR Bot Commands",
-        description="Your weekly project planning assistant!",
+        description="Your weekly project planning assistant! Click buttons for interactive features.",
         color=discord.Color.blue()
     )
     
     embed.add_field(
         name="📋 Project Commands",
         value="""
-`/project start` - Start a new project
+`/project start` - Start a new project with auto-tasks
 `/project status` - List all projects
-`/project info` - Get project details
-`/project archive` - Archive a project
-`/project checklist` - Manage project tasks
+`/project info` - Get project details with quick action buttons
+`/project archive` - Archive a completed project
+`/project checklist add` - Add a task to a project
+`/project checklist list` - View tasks with filter buttons
+`/project checklist toggle` - Mark task complete/incomplete
+`/project checklist remove` - Delete a task
         """,
         inline=False
     )
@@ -228,7 +435,8 @@ async def help_command(interaction: discord.Interaction):
     embed.add_field(
         name="📅 Weekly Commands",
         value="""
-`/week start` - Start a new week
+`/week start` - Start a new week with project overview
+`/week stats` - Interactive stats dashboard with filtering 🎯 NEW
 `/week summary` - Quick progress summary
 `/week retro` - Run project retrospective
         """,
@@ -238,11 +446,12 @@ async def help_command(interaction: discord.Interaction):
     embed.add_field(
         name="💡 Idea Commands",
         value="""
-`/idea add` - Add a new idea (with description)
+`/idea add` - Add a new idea with description
 `/idea quick` - Quick add with just a title
-`/idea list` - Browse all ideas
-`/idea pick` - Pick an idea for a project
+`/idea list` - Browse ideas with voting buttons 👍👎🔥
+`/idea pick` - Pick an idea to turn into a project
 `/idea random` - Get a random idea
+`/idea delete` - Delete an idea from the pool
         """,
         inline=False
     )
@@ -269,12 +478,33 @@ async def help_command(interaction: discord.Interaction):
     )
     
     embed.add_field(
-        name="💬 Chat",
-        value="Just @mention me to chat! I can help with project planning, coding questions, and more.",
+        name="⚙️ Admin Commands",
+        value="""
+`/model` - Change the LLM model (admin only)
+        """,
         inline=False
     )
     
-    embed.set_footer(text="Let's make your projects go brrrrrr! 🏎️")
+    embed.add_field(
+        name="💬 Chat & Interaction",
+        value="""
+**@mention me** to chat! I can help with:
+• Project planning & brainstorming
+• Code questions & debugging
+• Task ideas & suggestions
+• Team coordination
+
+**Interactive Features:**
+• Vote on ideas with 👍👎🔥
+• Assign tasks with dropdown buttons
+• Change project status instantly
+• Set task priorities on the fly
+• View team stats with buttons
+        """,
+        inline=False
+    )
+    
+    embed.set_footer(text="Let's make your projects go brrrrrr! 🏎️ | Powered by gpt-5-nano")
     await interaction.response.send_message(embed=embed)
 
 

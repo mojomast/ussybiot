@@ -36,6 +36,13 @@ BRRR Bot is a Discord bot that goes **BRRRRRRRR** — fast, efficient, and high-
 
 ## New Features (Dec 3, 2025) 🎉
 
+### Dynamic LLM Model Selection (Latest!)
+- **`/model` command**: Switch between different AI models on-the-fly
+- **Password-protected**: Enter password "platypus" to access model selection
+- **Interactive UI**: See current model and choose from available options with one-click buttons
+- **No restart needed**: Change models instantly without restarting the bot
+- **Supported models**: OpenAI (GPT-5, GPT-4o, GPT-4o-mini) and other providers via Requesty API
+
 ### Multi-Step Tool Operations (Latest!)
 - **Full context preservation**: The bot now remembers ALL previous tool calls when handling complex requests
 - **Parallel tool execution**: Create multiple tasks, add multiple notes, assign multiple users - all in one request

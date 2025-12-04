@@ -5,6 +5,46 @@ This document tracks the latest development session, including new project manag
 
 ---
 
+## Summary of Latest Changes (December 3, 2025 - Session 4)
+
+### Dynamic LLM Model Selection Command (`/model`)
+
+**Feature Added:** Password-protected `/model` command to switch between AI models without restarting the bot.
+
+**Implementation Details:**
+- New `PasswordModal` class for password input (password: "platypus")
+- New `ModelSelectView` class with interactive buttons for model selection
+- Models fetched dynamically from Requesty API
+- Current model highlighted with success button style
+- Supports switching between OpenAI models (GPT-5-nano, GPT-4o, GPT-4o-mini) and other providers
+
+**Key Architecture Decisions:**
+- Password-based access (not admin ID) allows any user to try
+- Password prompt on initial command AND when clicking model buttons (security)
+- `send_modal()` used for initial response, `followup.send()` for subsequent messages
+- Model persists in memory (`bot.llm.model`), reverts to default on restart (from `.env` `LLM_MODEL`)
+
+**Files Modified:**
+- `src/bot.py`: Added PasswordModal, ModelSelectView classes, model_command function
+
+**Documentation Updated:**
+- `README.md`: Added to "New Features" section
+- `USAGE_GUIDE.md`: New section explaining how to switch models
+- `QUICK_REFERENCE.md`: Added `/model` command reference
+- `TECHNICAL_DOCUMENTATION.md`: Added implementation details section
+
+**Bug Fixes in This Session:**
+- Fixed `AttributeError: 'InteractionResponse' object has no attribute 'show_modal'` → Changed to `send_modal()`
+- Fixed `InteractionResponded` error → Removed `defer()` call after modal (already responded to interaction)
+
+**Available Models:**
+- `openai/gpt-5-nano` - Fast, efficient (default)
+- `openai/gpt-4o` - Most capable
+- `openai/gpt-4o-mini` - Balanced
+- Others available via Requesty API
+
+---
+
 ## Summary of Latest Changes (December 3, 2025 - Session 3)
 
 ### Multi-Round Tool Call Memory Fix (CRITICAL)

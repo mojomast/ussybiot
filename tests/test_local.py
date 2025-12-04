@@ -38,7 +38,7 @@ async def main():
         print("Error: REQUESTY_API_KEY not found")
         return
         
-    llm = LLMClient(api_key, model="openai/gpt-4o-mini")
+    llm = LLMClient(api_key, model="openai/gpt-5-nano")
     
     # Mock Bot
     bot = MagicMock()

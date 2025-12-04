@@ -34,7 +34,7 @@ class LLMClient:
     
     BASE_URL = "https://router.requesty.ai/v1"
     
-    def __init__(self, api_key: str, model: str = "openai/gpt-4o-mini"):
+    def __init__(self, api_key: str, model: str = "openai/gpt-5-nano"):
         self.api_key = api_key
         self.model = model
         self.session: Optional[aiohttp.ClientSession] = None
@@ -48,6 +48,36 @@ class LLMClient:
     async def close(self):
         if self.session and not self.session.closed:
             await self.session.close()
+    
+    async def get_available_models(self) -> List[Dict[str, str]]:
+        """Fetch list of available models from Requesty API"""
+        await self.ensure_session()
+        
+        headers = {
+            "Authorization": f"Bearer {self.api_key}",
+            "Content-Type": "application/json"
+        }
+        
+        try:
+            async with self.session.get(
+                f"{self.BASE_URL}/models",
+                headers=headers,
+                timeout=aiohttp.ClientTimeout(total=10)
+            ) as response:
+                if response.status != 200:
+                    error_text = await response.text()
+                    logger.error(f"Failed to fetch models: {response.status} - {error_text}")
+                    return []
+                
+                result = await response.json()
+                models = result.get('data', [])
+                logger.debug(f"Fetched {len(models)} models from API")
+                
+                # Return list of model IDs
+                return [{"id": m.get('id'), "name": m.get('id')} for m in models]
+        except Exception as e:
+            logger.error(f"Error fetching models: {e}")
+            return []
     
     async def _api_call(self, payload: dict) -> dict:
         """Make an API call with proper error handling and timeout.
@@ -268,7 +298,7 @@ class LLMClient:
                     # Use a more stable fallback model for the retry while
                     # keeping the primary model (e.g., openai/gpt-5-nano) for
                     # normal calls.
-                    retry_model = "openai/gpt-4o-mini"
+                    retry_model = "openai/gpt-5-nano"
                     logger.debug(f"Retrying with fallback model: {retry_model}")
                     retry_payload = {
                         "model": retry_model,

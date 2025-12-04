@@ -53,7 +53,7 @@ Task Management:
 - `toggle_task` - Toggle task completion (requires task_id)
 - `delete_task` - Delete a task (requires task_id)
 
-Task Assignment:
+Task Assignment & Collaboration:
 - `assign_task` - Assign task to a user (requires task_id, user_id as STRING from mention)
 - `unassign_task` - Remove task assignment (requires task_id)
 - `get_user_tasks` - Get tasks assigned to a user (requires user_id)
@@ -72,6 +72,13 @@ Notes:
 - `get_project_notes` - Get project notes (requires project_id)
 - `add_task_note` - Add note to task (requires task_id, content)
 - `get_task_notes` - Get task notes (requires task_id)
+
+**IMPORTANT - Enhanced Task Display Features:**
+- `/project info` now shows task assignments (→ @user) and note indicators (📝 with count)
+- Assigned users can click buttons to view/add notes directly to their tasks
+- `/project task details` shows full task details with all notes and interactive buttons
+- `/project task assign` lets project owners assign tasks to team members
+- Assigned users can mark tasks complete/incomplete from task detail view
 
 GitHub Integration:
 - `github_list_files` - List repo files (requires repo as 'owner/repo')
@@ -108,6 +115,9 @@ CHAT_COMMANDS = """**Discord commands & features (very important):**
   - `/project start`  start a new project (modal).
   - `/project status` / `/project info` / `/project archive`.
   - `/project checklist add|list|toggle|remove`  manage project tasks.
+  - `/project task details <id>`  view detailed task with notes and collaboration buttons.
+  - `/project task assign <id> <user>`  assign a task to a team member.
+  - `/project task unassign <id>`  remove task assignment.
 - Weekly workflow (`/week` group):
   - `/week start`  weekly overview.
   - `/week retro`  run retrospectives (uses the LLM when available).

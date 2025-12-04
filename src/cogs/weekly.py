@@ -90,6 +90,168 @@ class WeekView(discord.ui.View):
         self.add_item(StartProjectButton(bot))
 
 
+class StatsView(discord.ui.View):
+    """Interactive stats dashboard with button-based navigation"""
+    
+    def __init__(self, db, bot):
+        super().__init__(timeout=600)
+        self.db = db
+        self.bot = bot
+        self.current_view = "overview"  # Track which view is showing
+    
+    @discord.ui.button(label="📊 Overview", style=discord.ButtonStyle.primary, emoji="📊")
+    async def show_overview(self, interaction: discord.Interaction, button: discord.ui.Button):
+        """Show overall stats"""
+        if interaction.guild is None:
+            return
+        
+        embed = discord.Embed(
+            title="📊 Weekly Stats Overview",
+            color=discord.Color.blue()
+        )
+        
+        # Get all projects
+        all_projects = await self.db.get_guild_projects(interaction.guild.id)
+        active = sum(1 for p in all_projects if p['status'] == 'active')
+        completed = sum(1 for p in all_projects if p['status'] == 'completed')
+        paused = sum(1 for p in all_projects if p['status'] == 'paused')
+        archived = sum(1 for p in all_projects if p['status'] == 'archived')
+        
+        embed.add_field(name="🟢 Active", value=str(active), inline=True)
+        embed.add_field(name="✅ Completed", value=str(completed), inline=True)
+        embed.add_field(name="⏸️ Paused", value=str(paused), inline=True)
+        embed.add_field(name="📦 Archived", value=str(archived), inline=True)
+        
+        # Task stats
+        total_tasks = 0
+        done_tasks = 0
+        for project in all_projects[:50]:
+            tasks = await self.db.get_project_tasks(project['id'])
+            total_tasks += len(tasks)
+            done_tasks += sum(1 for t in tasks if t['is_done'])
+        
+        embed.add_field(name="📋 Total Tasks", value=str(total_tasks), inline=True)
+        embed.add_field(name="✅ Completed Tasks", value=f"{done_tasks}/{total_tasks}", inline=True)
+        
+        if total_tasks > 0:
+            pct = int((done_tasks / total_tasks) * 100)
+            embed.add_field(name="📈 Completion %", value=f"{pct}%", inline=True)
+        
+        # Ideas stats
+        all_ideas = await self.db.get_guild_ideas(interaction.guild.id, unused_only=False)
+        unused_ideas = await self.db.get_guild_ideas(interaction.guild.id, unused_only=True)
+        embed.add_field(name="💡 Total Ideas", value=str(len(all_ideas)), inline=True)
+        embed.add_field(name="💡 Unused Ideas", value=str(len(unused_ideas)), inline=True)
+        
+        await interaction.response.edit_message(embed=embed)
+    
+    @discord.ui.button(label="🚀 Active Projects", style=discord.ButtonStyle.success, emoji="🚀")
+    async def show_active(self, interaction: discord.Interaction, button: discord.ui.Button):
+        """Show active projects breakdown"""
+        if interaction.guild is None:
+            return
+        
+        embed = discord.Embed(
+            title="🚀 Active Projects",
+            color=discord.Color.green()
+        )
+        
+        active_projects = await self.db.get_guild_projects(interaction.guild.id, status='active')
+        
+        if not active_projects:
+            embed.description = "No active projects right now!"
+            await interaction.response.edit_message(embed=embed)
+            return
+        
+        for project in active_projects[:10]:
+            tasks = await self.db.get_project_tasks(project['id'])
+            done = sum(1 for t in tasks if t['is_done'])
+            total = len(tasks)
+            progress = f"{done}/{total}" if tasks else "0/0"
+            
+            # Create progress bar
+            filled = int((done / total * 10)) if total > 0 else 0
+            bar = "█" * filled + "░" * (10 - filled)
+            
+            embed.add_field(
+                name=f"📌 {project['title']}",
+                value=f"`{bar}` {progress}",
+                inline=False
+            )
+        
+        if len(active_projects) > 10:
+            embed.set_footer(text=f"Showing 10 of {len(active_projects)} projects")
+        
+        await interaction.response.edit_message(embed=embed)
+    
+    @discord.ui.button(label="✅ Completed", style=discord.ButtonStyle.green, emoji="✅")
+    async def show_completed(self, interaction: discord.Interaction, button: discord.ui.Button):
+        """Show recently completed projects"""
+        if interaction.guild is None:
+            return
+        
+        embed = discord.Embed(
+            title="✅ Completed Projects",
+            color=discord.Color.green()
+        )
+        
+        all_projects = await self.db.get_guild_projects(interaction.guild.id)
+        completed = [p for p in all_projects if p['status'] == 'completed']
+        
+        if not completed:
+            embed.description = "No completed projects yet! Keep shipping! 🚀"
+            await interaction.response.edit_message(embed=embed)
+            return
+        
+        for project in completed[-10:]:
+            tasks = await self.db.get_project_tasks(project['id'])
+            embed.add_field(
+                name=f"🎉 {project['title']}",
+                value=f"{len(tasks)} tasks completed",
+                inline=False
+            )
+        
+        embed.set_footer(text=f"Total completed: {len(completed)}")
+        await interaction.response.edit_message(embed=embed)
+    
+    @discord.ui.button(label="💡 Ideas", style=discord.ButtonStyle.blurple, emoji="💡")
+    async def show_ideas(self, interaction: discord.Interaction, button: discord.ui.Button):
+        """Show idea pool status"""
+        if interaction.guild is None:
+            return
+        
+        embed = discord.Embed(
+            title="💡 Idea Pool Status",
+            color=discord.Color.yellow()
+        )
+        
+        all_ideas = await self.db.get_guild_ideas(interaction.guild.id, unused_only=False)
+        unused = await self.db.get_guild_ideas(interaction.guild.id, unused_only=True)
+        
+        embed.add_field(name="Total Ideas", value=str(len(all_ideas)), inline=True)
+        embed.add_field(name="Available", value=str(len(unused)), inline=True)
+        embed.add_field(name="Used", value=str(len(all_ideas) - len(unused)), inline=True)
+        
+        if unused:
+            embed.add_field(
+                name="Ready to Ship",
+                value="\n".join([f"• {idea['title']}" for idea in unused[:5]]),
+                inline=False
+            )
+            if len(unused) > 5:
+                embed.add_field(name="", value=f"... and {len(unused) - 5} more ideas", inline=False)
+        
+        await interaction.response.edit_message(embed=embed)
+
+
+class WeekView(discord.ui.View):
+    """View for weekly overview with action buttons"""
+    
+    def __init__(self, bot):
+        super().__init__(timeout=None)
+        self.add_item(StartProjectButton(bot))
+
+
 class Weekly(commands.Cog):
     """Weekly rhythm commands"""
     
@@ -312,6 +474,54 @@ class Weekly(commands.Cog):
         # Send individual project retros
         for embed in retro_results:
             await interaction.channel.send(embed=embed)
+    
+    @week_group.command(name="stats", description="Interactive stats dashboard with filtering options")
+    async def week_stats(self, interaction: discord.Interaction):
+        """Show interactive stats dashboard"""
+        
+        view = StatsView(self.db, self.bot)
+        embed = discord.Embed(
+            title="📊 Weekly Stats Dashboard",
+            description="Click buttons below to explore different stats!",
+            color=discord.Color.blue()
+        )
+        
+        # Show initial overview
+        all_projects = await self.db.get_guild_projects(interaction.guild.id)
+        active = sum(1 for p in all_projects if p['status'] == 'active')
+        completed = sum(1 for p in all_projects if p['status'] == 'completed')
+        paused = sum(1 for p in all_projects if p['status'] == 'paused')
+        archived = sum(1 for p in all_projects if p['status'] == 'archived')
+        
+        embed.add_field(name="🟢 Active", value=str(active), inline=True)
+        embed.add_field(name="✅ Completed", value=str(completed), inline=True)
+        embed.add_field(name="⏸️ Paused", value=str(paused), inline=True)
+        embed.add_field(name="📦 Archived", value=str(archived), inline=True)
+        
+        # Task stats
+        total_tasks = 0
+        done_tasks = 0
+        for project in all_projects[:50]:
+            tasks = await self.db.get_project_tasks(project['id'])
+            total_tasks += len(tasks)
+            done_tasks += sum(1 for t in tasks if t['is_done'])
+        
+        embed.add_field(name="📋 Total Tasks", value=str(total_tasks), inline=True)
+        embed.add_field(name="✅ Completed Tasks", value=f"{done_tasks}/{total_tasks}", inline=True)
+        
+        if total_tasks > 0:
+            pct = int((done_tasks / total_tasks) * 100)
+            embed.add_field(name="📈 Completion %", value=f"{pct}%", inline=True)
+        
+        # Ideas stats
+        all_ideas = await self.db.get_guild_ideas(interaction.guild.id, unused_only=False)
+        unused_ideas = await self.db.get_guild_ideas(interaction.guild.id, unused_only=True)
+        embed.add_field(name="💡 Total Ideas", value=str(len(all_ideas)), inline=True)
+        embed.add_field(name="💡 Unused Ideas", value=str(len(unused_ideas)), inline=True)
+        
+        embed.set_footer(text="Click buttons to explore stats by category!")
+        
+        await interaction.response.send_message(embed=embed, view=view)
     
     @week_group.command(name="summary", description="Quick summary of the week's progress")
     async def week_summary(self, interaction: discord.Interaction):

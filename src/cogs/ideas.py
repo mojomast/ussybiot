@@ -50,6 +50,101 @@ class IdeaModal(discord.ui.Modal, title="Add New Idea"):
         await interaction.response.defer()
 
 
+class IdeaVoteView(discord.ui.View):
+    """View for voting on ideas"""
+    
+    def __init__(self, idea: dict, db, bot):
+        super().__init__(timeout=600)
+        self.idea = idea
+        self.db = db
+        self.bot = bot
+        self.user_votes = {}  # Track user votes per interaction
+    
+    @discord.ui.button(label="👍", style=discord.ButtonStyle.success, emoji="👍")
+    async def upvote(self, interaction: discord.Interaction, button: discord.ui.Button):
+        """Upvote an idea"""
+        user_id = interaction.user.id
+        
+        # Track vote
+        if user_id not in self.user_votes:
+            self.user_votes[user_id] = 0
+        
+        current_vote = self.user_votes[user_id]
+        
+        # If user already upvoted, remove it
+        if current_vote == 1:
+            self.user_votes[user_id] = 0
+            response = "Upvote removed!"
+        else:
+            self.user_votes[user_id] = 1
+            response = "Upvote added! 👍"
+        
+        # Update vote count
+        upvotes = sum(1 for v in self.user_votes.values() if v == 1)
+        downvotes = sum(1 for v in self.user_votes.values() if v == -1)
+        
+        button.label = f"👍 {upvotes}" if upvotes > 0 else "👍"
+        
+        # Update downvote button
+        for item in self.children:
+            if isinstance(item, discord.ui.Button) and "👎" in (item.emoji or item.label or ""):
+                item.label = f"👎 {downvotes}" if downvotes > 0 else "👎"
+                break
+        
+        await interaction.response.edit_message(view=self)
+        await interaction.followup.send(response, ephemeral=True)
+    
+    @discord.ui.button(label="👎", style=discord.ButtonStyle.danger, emoji="👎")
+    async def downvote(self, interaction: discord.Interaction, button: discord.ui.Button):
+        """Downvote an idea"""
+        user_id = interaction.user.id
+        
+        # Track vote
+        if user_id not in self.user_votes:
+            self.user_votes[user_id] = 0
+        
+        current_vote = self.user_votes[user_id]
+        
+        # If user already downvoted, remove it
+        if current_vote == -1:
+            self.user_votes[user_id] = 0
+            response = "Downvote removed!"
+        else:
+            self.user_votes[user_id] = -1
+            response = "Downvote added! 👎"
+        
+        # Update vote count
+        upvotes = sum(1 for v in self.user_votes.values() if v == 1)
+        downvotes = sum(1 for v in self.user_votes.values() if v == -1)
+        
+        button.label = f"👎 {downvotes}" if downvotes > 0 else "👎"
+        
+        # Update upvote button
+        for item in self.children:
+            if isinstance(item, discord.ui.Button) and "👍" in (item.emoji or item.label or ""):
+                item.label = f"👍 {upvotes}" if upvotes > 0 else "👍"
+                break
+        
+        await interaction.response.edit_message(view=self)
+        await interaction.followup.send(response, ephemeral=True)
+    
+    @discord.ui.button(label="🔥", style=discord.ButtonStyle.blurple, emoji="🔥")
+    async def hot_take(self, interaction: discord.Interaction, button: discord.ui.Button):
+        """Mark as a hot take/trending"""
+        user_id = interaction.user.id
+        hot_count = sum(1 for item in self.children if isinstance(item, discord.ui.Button) and "🔥" in (item.emoji or item.label or ""))
+        
+        # Simple toggle for demo purposes
+        if button.label and button.label.startswith("🔥 "):
+            current = int(button.label.split()[1])
+            button.label = f"🔥 {current + 1}"
+        else:
+            button.label = "🔥 1"
+        
+        await interaction.response.edit_message(view=self)
+        await interaction.followup.send("This is trending! 🔥", ephemeral=True)
+
+
 class IdeaSelectView(discord.ui.View):
     """View for selecting an idea to turn into a project"""
     
@@ -202,7 +297,7 @@ class Ideas(commands.Cog):
         interaction: discord.Interaction,
         show_used: Optional[bool] = False
     ):
-        """Show all ideas"""
+        """Show all ideas with voting buttons"""
         
         ideas = await self.db.get_guild_ideas(
             interaction.guild.id,
@@ -238,7 +333,12 @@ class Ideas(commands.Cog):
         if len(ideas) > 15:
             embed.set_footer(text=f"Showing 15 of {len(ideas)} ideas")
         
-        await interaction.response.send_message(embed=embed)
+        # Show voting view for the first idea
+        view = None
+        if ideas:
+            view = IdeaVoteView(ideas[0], self.db, self.bot)
+        
+        await interaction.response.send_message(embed=embed, view=view)
     
     @idea_group.command(name="pick", description="Pick an idea to turn into a project")
     async def idea_pick(self, interaction: discord.Interaction):
