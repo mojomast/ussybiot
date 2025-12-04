@@ -36,14 +36,25 @@ BRRR Bot is a Discord bot that goes **BRRRRRRRR** — fast, efficient, and high-
 
 ## New Features (Dec 3, 2025) 🎉
 
-### Dynamic LLM Model Selection (Latest!)
+### Interactive Menu System (Latest!) 🎯
+- **`/menu` command**: Visual, button-driven interface to access all bot features
+- **`brrrmenu` trigger**: Type "brrrmenu" in chat to instantly open the menu (no slash command needed!)
+- **No command memorization needed**: Click buttons to navigate through all features
+- **5 main categories**: Projects, Ideas, Weekly, Chat & Memory, and Persona
+- **Modal forms**: Clean input dialogs for adding projects, ideas, and more
+- **Preset personas**: One-click personality changes (Concise, Detailed, Friendly, Professional)
+- **Quick stats**: View server stats, project progress, and memories at a glance
+- **Always available**: Back buttons on every submenu for easy navigation
+- **See [MENU_GUIDE.md](MENU_GUIDE.md) for full documentation**
+
+### Dynamic LLM Model Selection
 - **`/model` command**: Switch between different AI models on-the-fly
 - **Password-protected**: Enter password "platypus" to access model selection
 - **Interactive UI**: See current model and choose from available options with one-click buttons
 - **No restart needed**: Change models instantly without restarting the bot
 - **Supported models**: OpenAI (GPT-5, GPT-4o, GPT-4o-mini) and other providers via Requesty API
 
-### Multi-Step Tool Operations (Latest!)
+### Multi-Step Tool Operations
 - **Full context preservation**: The bot now remembers ALL previous tool calls when handling complex requests
 - **Parallel tool execution**: Create multiple tasks, add multiple notes, assign multiple users - all in one request
 - **Smart completion**: Bot stops when the job is done instead of going in circles
@@ -319,6 +330,12 @@ python run.py
 
 ## Commands
 
+### 🎯 Quick Access
+| Command | Description |
+|---------|-------------|
+| `/menu` | **Interactive menu to access all features** - No need to memorize commands! |
+| `/help` | View all available commands with examples |
+
 ### 💬 Chat
 Talk to the bot by **@mentioning** it, **replying** to its messages, or using `/chat`.
 
@@ -338,8 +355,9 @@ Talk to the bot by **@mentioning** it, **replying** to its messages, or using `/
 | Command | Description |
 |---------|-------------|
 | `/week start` | Post weekly overview |
-| `/week retro` | AI-generated retrospective |
+| `/week stats` | Interactive stats dashboard |
 | `/week summary` | Quick progress summary |
+| `/week retro` | AI-generated retrospective |
 
 ### 💡 Ideas
 | Command | Description |

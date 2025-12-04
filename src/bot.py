@@ -130,10 +130,23 @@ class BrrrBot(commands.Bot):
         for guild in self.guilds:
             try:
                 logger.info(f"Syncing commands to guild {guild.name}...")
+                # Validate all commands before syncing
+                for cmd in self.tree._get_all_commands():
+                    logger.debug(f"  - Validating /{cmd.name}...")
                 synced = await self.tree.sync(guild=guild)
                 logger.info(f"Successfully synced {len(synced)} commands to {guild.name}")
+                for cmd in synced:
+                    logger.info(f"  ✓ /{cmd.name}")
             except Exception as e:
-                logger.error(f"Failed to sync to guild {guild.name}: {e}")
+                logger.error(f"Failed to sync to guild {guild.name}: {e}", exc_info=True)
+        
+        # Also do a global sync
+        try:
+            logger.info("Performing global sync...")
+            global_synced = await self.tree.sync()
+            logger.info(f"Global sync: {len(global_synced)} commands")
+        except Exception as e:
+            logger.error(f"Global sync failed: {e}", exc_info=True)
         
         # Set presence
         await self.change_presence(
@@ -154,6 +167,28 @@ class BrrrBot(commands.Bot):
         
         # Ignore messages if bot isn't ready yet or if sent before bot started
         if self._started_at is None or message.created_at < self._started_at:
+            return
+        
+        # Check for "brrrmenu" trigger first (before other handlers)
+        if "brrrmenu" in message.content.lower():
+            # Create a fake interaction-like response
+            embed = discord.Embed(
+                title="🚀 BRRR Bot - Main Menu",
+                description="Choose a category to get started!\n\nClick the buttons below to explore features:",
+                color=discord.Color.blue()
+            )
+            
+            embed.add_field(name="📋 Projects", value="Start, manage, and track projects", inline=True)
+            embed.add_field(name="💡 Ideas", value="Capture and browse ideas", inline=True)
+            embed.add_field(name="📅 Weekly", value="Weekly stats and summaries", inline=True)
+            embed.add_field(name="💬 Chat & Memory", value="Manage memories and chat", inline=True)
+            embed.add_field(name="🎭 Persona", value="Customize bot personality", inline=True)
+            embed.add_field(name="❓ Help", value="View full command list", inline=True)
+            embed.set_footer(text="Tip: Use /menu anytime for quick access!")
+            
+            from src.bot import MainMenuView
+            view = MainMenuView()
+            await message.reply(embed=embed, view=view, mention_author=False)
             return
         
         # Process commands first (for prefix commands if any)
@@ -409,12 +444,719 @@ async def brrr_status(interaction: discord.Interaction):
     await interaction.response.send_message(embed=embed)
 
 
+# =============================================================================
+# INTERACTIVE MENU SYSTEM
+# =============================================================================
+
+class MainMenuView(discord.ui.View):
+    """Main menu with category buttons"""
+    
+    def __init__(self):
+        super().__init__(timeout=300)
+    
+    @discord.ui.button(label="Projects", style=discord.ButtonStyle.primary, emoji="📋", row=0)
+    async def projects_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        embed = discord.Embed(
+            title="📋 Project Management",
+            description="Manage your projects and tasks!",
+            color=discord.Color.blue()
+        )
+        view = ProjectMenuView()
+        await interaction.response.edit_message(embed=embed, view=view)
+    
+    @discord.ui.button(label="Ideas", style=discord.ButtonStyle.primary, emoji="💡", row=0)
+    async def ideas_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        embed = discord.Embed(
+            title="💡 Idea Pool",
+            description="Capture and manage your project ideas!",
+            color=discord.Color.yellow()
+        )
+        view = IdeaMenuView()
+        await interaction.response.edit_message(embed=embed, view=view)
+    
+    @discord.ui.button(label="Weekly", style=discord.ButtonStyle.primary, emoji="📅", row=0)
+    async def weekly_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        embed = discord.Embed(
+            title="📅 Weekly Dashboard",
+            description="Track your weekly progress and stats!",
+            color=discord.Color.gold()
+        )
+        view = WeeklyMenuView()
+        await interaction.response.edit_message(embed=embed, view=view)
+    
+    @discord.ui.button(label="Chat & Memory", style=discord.ButtonStyle.primary, emoji="💬", row=1)
+    async def chat_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        embed = discord.Embed(
+            title="💬 Chat & Memory",
+            description="Manage chat features and what the bot remembers!",
+            color=discord.Color.purple()
+        )
+        view = ChatMenuView()
+        await interaction.response.edit_message(embed=embed, view=view)
+    
+    @discord.ui.button(label="Persona", style=discord.ButtonStyle.primary, emoji="🎭", row=1)
+    async def persona_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        embed = discord.Embed(
+            title="🎭 Persona Settings",
+            description="Customize how the bot responds to you!",
+            color=discord.Color.purple()
+        )
+        view = PersonaMenuView()
+        await interaction.response.edit_message(embed=embed, view=view)
+    
+    @discord.ui.button(label="Help", style=discord.ButtonStyle.secondary, emoji="❓", row=2)
+    async def help_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        # Show help embed
+        embed = discord.Embed(
+            title="🚀 BRRR Bot Help",
+            description="Full command reference and tips!",
+            color=discord.Color.blue()
+        )
+        
+        embed.add_field(
+            name="📋 Project Commands",
+            value="`/project start` • `/project status` • `/project info`\n`/project archive` • `/project checklist add/list/toggle`",
+            inline=False
+        )
+        
+        embed.add_field(
+            name="💡 Idea Commands",
+            value="`/idea add` • `/idea quick` • `/idea list`\n`/idea pick` • `/idea random` • `/idea delete`",
+            inline=False
+        )
+        
+        embed.add_field(
+            name="📅 Weekly Commands",
+            value="`/week start` • `/week stats` • `/week summary` • `/week retro`",
+            inline=False
+        )
+        
+        embed.add_field(
+            name="💬 Chat Commands",
+            value="`/chat` • `/memory show/forget/clear/add`\n`/persona set/preset/show/clear`",
+            inline=False
+        )
+        
+        embed.add_field(
+            name="💡 Pro Tips",
+            value="• Use `/menu` anytime for quick access\n• @mention me to chat naturally\n• All menus have a back button",
+            inline=False
+        )
+        
+        view = MainMenuView()
+        await interaction.response.edit_message(embed=embed, view=view)
+
+
+class ProjectMenuView(discord.ui.View):
+    """Project management submenu"""
+    
+    def __init__(self):
+        super().__init__(timeout=300)
+    
+    @discord.ui.button(label="Start New Project", style=discord.ButtonStyle.success, emoji="🚀")
+    async def start_project(self, interaction: discord.Interaction, button: discord.ui.Button):
+        from src.cogs.projects import ProjectModal
+        modal = ProjectModal()
+        await interaction.response.send_modal(modal)
+        
+        # Wait for modal submission
+        try:
+            await modal.wait()
+        except:
+            return
+        
+        if not hasattr(modal, 'result'):
+            return
+        
+        data = modal.result
+        
+        # Create the project
+        project_id = await bot.db.create_project(
+            guild_id=interaction.guild.id,
+            title=data['title'],
+            description=data['description'],
+            owners=[interaction.user.id],
+            tags=data['tags']
+        )
+        
+        # Create thread if possible
+        thread = None
+        if interaction.channel.type == discord.ChannelType.text:
+            try:
+                thread = await interaction.channel.create_thread(
+                    name=f"🚀 {data['title']}",
+                    type=discord.ChannelType.public_thread
+                )
+                await bot.db.update_project(project_id, thread_id=thread.id)
+            except discord.Forbidden:
+                pass
+        
+        embed = discord.Embed(
+            title=f"🚀 Project Started: {data['title']}",
+            description=data['description'] or "No description provided",
+            color=discord.Color.green()
+        )
+        embed.add_field(name="ID", value=str(project_id), inline=True)
+        embed.add_field(name="Owner", value=interaction.user.mention, inline=True)
+        
+        if data['tags']:
+            embed.add_field(name="Tags", value=", ".join(f"`{t}`" for t in data['tags']), inline=False)
+        
+        if thread:
+            embed.add_field(name="Thread", value=thread.mention, inline=False)
+        
+        await interaction.followup.send(embed=embed)
+    
+    @discord.ui.button(label="View All Projects", style=discord.ButtonStyle.primary, emoji="📊")
+    async def view_projects(self, interaction: discord.Interaction, button: discord.ui.Button):
+        projects = await bot.db.get_guild_projects(interaction.guild.id, status='active')
+        
+        if not projects:
+            await interaction.response.send_message(
+                "No active projects! Use the button above to start one. 🚀",
+                ephemeral=True
+            )
+            return
+        
+        embed = discord.Embed(
+            title="📊 Active Projects",
+            color=discord.Color.blue()
+        )
+        
+        for p in projects[:10]:
+            tasks = await bot.db.get_project_tasks(p['id'])
+            done = sum(1 for t in tasks if t['is_done'])
+            
+            value = p['description'][:100] if p['description'] else "No description"
+            if tasks:
+                value += f"\n📋 Tasks: {done}/{len(tasks)}"
+            
+            embed.add_field(
+                name=f"🟢 [{p['id']}] {p['title']}",
+                value=value,
+                inline=False
+            )
+        
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+    
+    @discord.ui.button(label="Archived Projects", style=discord.ButtonStyle.secondary, emoji="📦")
+    async def archived_projects(self, interaction: discord.Interaction, button: discord.ui.Button):
+        projects = await bot.db.get_guild_projects(interaction.guild.id, status='archived')
+        
+        if not projects:
+            await interaction.response.send_message(
+                "No archived projects yet!",
+                ephemeral=True
+            )
+            return
+        
+        embed = discord.Embed(
+            title="📦 Archived Projects",
+            color=discord.Color.greyple()
+        )
+        
+        for p in projects[:10]:
+            embed.add_field(
+                name=f"[{p['id']}] {p['title']}",
+                value=p['description'][:100] if p['description'] else "No description",
+                inline=False
+            )
+        
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+    
+    @discord.ui.button(label="← Back to Menu", style=discord.ButtonStyle.secondary, row=1)
+    async def back_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        embed = discord.Embed(
+            title="🚀 BRRR Bot - Main Menu",
+            description="Choose a category to get started!",
+            color=discord.Color.blue()
+        )
+        view = MainMenuView()
+        await interaction.response.edit_message(embed=embed, view=view)
+
+
+class IdeaMenuView(discord.ui.View):
+    """Idea pool submenu"""
+    
+    def __init__(self):
+        super().__init__(timeout=300)
+    
+    @discord.ui.button(label="Add New Idea", style=discord.ButtonStyle.success, emoji="💡")
+    async def add_idea(self, interaction: discord.Interaction, button: discord.ui.Button):
+        from src.cogs.ideas import IdeaModal
+        modal = IdeaModal()
+        await interaction.response.send_modal(modal)
+        
+        try:
+            await modal.wait()
+        except:
+            return
+        
+        if not hasattr(modal, 'result'):
+            return
+        
+        data = modal.result
+        
+        idea_id = await bot.db.add_idea(
+            guild_id=interaction.guild.id,
+            title=data['title'],
+            description=data['description'],
+            submitted_by=interaction.user.id,
+            tags=data['tags']
+        )
+        
+        embed = discord.Embed(
+            title="💡 Idea Added!",
+            description=data['title'],
+            color=discord.Color.yellow()
+        )
+        embed.add_field(name="ID", value=str(idea_id), inline=True)
+        
+        if data['description']:
+            embed.add_field(name="Description", value=data['description'], inline=False)
+        
+        if data['tags']:
+            embed.add_field(name="Tags", value=", ".join(f"`{t}`" for t in data['tags']), inline=False)
+        
+        await interaction.followup.send(embed=embed)
+    
+    @discord.ui.button(label="Browse Ideas", style=discord.ButtonStyle.primary, emoji="📖")
+    async def browse_ideas(self, interaction: discord.Interaction, button: discord.ui.Button):
+        ideas = await bot.db.get_guild_ideas(interaction.guild.id, unused_only=True)
+        
+        if not ideas:
+            await interaction.response.send_message(
+                "No ideas yet! Add one with the button above. 💡",
+                ephemeral=True
+            )
+            return
+        
+        embed = discord.Embed(
+            title="💡 Idea Pool",
+            description=f"{len(ideas)} idea(s) available!",
+            color=discord.Color.yellow()
+        )
+        
+        for idea in ideas[:10]:
+            value = idea['description'][:100] if idea['description'] else "No description"
+            if idea['tags']:
+                value += f"\n🏷️ {', '.join(idea['tags'][:3])}"
+            
+            embed.add_field(
+                name=f"[{idea['id']}] {idea['title']}",
+                value=value,
+                inline=False
+            )
+        
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+    
+    @discord.ui.button(label="Random Idea", style=discord.ButtonStyle.primary, emoji="🎲")
+    async def random_idea(self, interaction: discord.Interaction, button: discord.ui.Button):
+        import random
+        ideas = await bot.db.get_guild_ideas(interaction.guild.id, unused_only=True)
+        
+        if not ideas:
+            await interaction.response.send_message(
+                "No ideas to pick from!",
+                ephemeral=True
+            )
+            return
+        
+        idea = random.choice(ideas)
+        
+        embed = discord.Embed(
+            title="🎲 Random Idea!",
+            description=idea['title'],
+            color=discord.Color.yellow()
+        )
+        
+        if idea['description']:
+            embed.add_field(name="Description", value=idea['description'], inline=False)
+        
+        if idea['tags']:
+            embed.add_field(name="Tags", value=", ".join(f"`{t}`" for t in idea['tags']), inline=False)
+        
+        embed.set_footer(text=f"Idea #{idea['id']}")
+        
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+    
+    @discord.ui.button(label="← Back to Menu", style=discord.ButtonStyle.secondary, row=1)
+    async def back_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        embed = discord.Embed(
+            title="🚀 BRRR Bot - Main Menu",
+            description="Choose a category to get started!",
+            color=discord.Color.blue()
+        )
+        view = MainMenuView()
+        await interaction.response.edit_message(embed=embed, view=view)
+
+
+class WeeklyMenuView(discord.ui.View):
+    """Weekly dashboard submenu"""
+    
+    def __init__(self):
+        super().__init__(timeout=300)
+    
+    @discord.ui.button(label="Start New Week", style=discord.ButtonStyle.success, emoji="📅")
+    async def start_week(self, interaction: discord.Interaction, button: discord.ui.Button):
+        from datetime import datetime
+        
+        active_projects = await bot.db.get_guild_projects(interaction.guild.id, status='active')
+        ideas = await bot.db.get_guild_ideas(interaction.guild.id, unused_only=True)
+        
+        today = datetime.utcnow()
+        week_num = today.isocalendar()[1]
+        
+        embed = discord.Embed(
+            title=f"🗓️ Week {week_num} - Let's Go BRRRRRR!",
+            description="New week, new opportunities to ship!",
+            color=discord.Color.gold()
+        )
+        
+        if active_projects:
+            project_lines = [f"🟢 **{p['title']}** (ID: {p['id']})" for p in active_projects[:5]]
+            embed.add_field(
+                name=f"📊 Active Projects ({len(active_projects)})",
+                value="\n".join(project_lines) or "None",
+                inline=False
+            )
+        
+        if ideas:
+            embed.add_field(
+                name=f"💡 Ideas Ready ({len(ideas)})",
+                value=f"{len(ideas)} ideas waiting to become projects!",
+                inline=False
+            )
+        
+        embed.add_field(
+            name="🎯 This Week's Focus",
+            value="What will you ship this week?",
+            inline=False
+        )
+        
+        await interaction.response.send_message(embed=embed)
+    
+    @discord.ui.button(label="View Stats", style=discord.ButtonStyle.primary, emoji="📊")
+    async def view_stats(self, interaction: discord.Interaction, button: discord.ui.Button):
+        projects = await bot.db.get_guild_projects(interaction.guild.id)
+        active = [p for p in projects if p['status'] == 'active']
+        archived = [p for p in projects if p['status'] == 'archived']
+        
+        all_tasks = []
+        for p in projects:
+            tasks = await bot.db.get_project_tasks(p['id'])
+            all_tasks.extend(tasks)
+        
+        completed_tasks = sum(1 for t in all_tasks if t['is_done'])
+        
+        embed = discord.Embed(
+            title="📊 Server Stats",
+            color=discord.Color.blue()
+        )
+        
+        embed.add_field(name="Total Projects", value=str(len(projects)), inline=True)
+        embed.add_field(name="Active", value=str(len(active)), inline=True)
+        embed.add_field(name="Archived", value=str(len(archived)), inline=True)
+        
+        embed.add_field(name="Total Tasks", value=str(len(all_tasks)), inline=True)
+        embed.add_field(name="Completed", value=str(completed_tasks), inline=True)
+        
+        if all_tasks:
+            completion = int((completed_tasks / len(all_tasks)) * 100)
+            embed.add_field(name="Completion", value=f"{completion}%", inline=True)
+        
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+    
+    @discord.ui.button(label="Weekly Summary", style=discord.ButtonStyle.primary, emoji="📝")
+    async def weekly_summary(self, interaction: discord.Interaction, button: discord.ui.Button):
+        projects = await bot.db.get_guild_projects(interaction.guild.id, status='active')
+        
+        if not projects:
+            await interaction.response.send_message(
+                "No active projects to summarize!",
+                ephemeral=True
+            )
+            return
+        
+        embed = discord.Embed(
+            title="📝 Weekly Summary",
+            description="Progress on active projects",
+            color=discord.Color.blue()
+        )
+        
+        for p in projects[:5]:
+            tasks = await bot.db.get_project_tasks(p['id'])
+            done = sum(1 for t in tasks if t['is_done'])
+            
+            progress = f"{done}/{len(tasks)} tasks complete" if tasks else "No tasks yet"
+            embed.add_field(
+                name=f"🟢 {p['title']}",
+                value=progress,
+                inline=False
+            )
+        
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+    
+    @discord.ui.button(label="← Back to Menu", style=discord.ButtonStyle.secondary, row=1)
+    async def back_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        embed = discord.Embed(
+            title="🚀 BRRR Bot - Main Menu",
+            description="Choose a category to get started!",
+            color=discord.Color.blue()
+        )
+        view = MainMenuView()
+        await interaction.response.edit_message(embed=embed, view=view)
+
+
+class ChatMenuView(discord.ui.View):
+    """Chat and memory management submenu"""
+    
+    def __init__(self):
+        super().__init__(timeout=300)
+    
+    @discord.ui.button(label="View Memories", style=discord.ButtonStyle.primary, emoji="🧠")
+    async def view_memories(self, interaction: discord.Interaction, button: discord.ui.Button):
+        memories = await bot.db.get_all_memories(interaction.user.id, interaction.guild.id)
+        
+        if not memories:
+            await interaction.response.send_message(
+                "I don't have any memories about you yet! Chat with me and I'll remember things. 🧠",
+                ephemeral=True
+            )
+            return
+        
+        embed = discord.Embed(
+            title=f"🧠 What I Remember About {interaction.user.display_name}",
+            color=discord.Color.purple()
+        )
+        
+        for key, data in list(memories.items())[:10]:
+            value = data['value'] if isinstance(data, dict) else data
+            context = data.get('context', '') if isinstance(data, dict) else ''
+            
+            field_value = value
+            if context:
+                field_value += f"\n*{context}*"
+            
+            embed.add_field(
+                name=key.replace('_', ' ').title(),
+                value=field_value[:1024],
+                inline=True
+            )
+        
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+    
+    @discord.ui.button(label="Chat Tips", style=discord.ButtonStyle.secondary, emoji="💬")
+    async def chat_tips(self, interaction: discord.Interaction, button: discord.ui.Button):
+        embed = discord.Embed(
+            title="💬 Chat Tips",
+            description="How to interact with the bot effectively!",
+            color=discord.Color.blue()
+        )
+        
+        embed.add_field(
+            name="How to Chat",
+            value="• @mention me in any channel\n• Reply to my messages\n• Use `/chat <message>` command\n• Just say 'brrr' in your message",
+            inline=False
+        )
+        
+        embed.add_field(
+            name="What I Can Help With",
+            value="• Project planning & ideas\n• Code questions\n• Task suggestions\n• Team coordination\n• General conversation",
+            inline=False
+        )
+        
+        embed.add_field(
+            name="Memory Features",
+            value="I remember things you tell me:\n• Skills & preferences\n• Project details\n• Team information\n• Use `/memory` commands to manage",
+            inline=False
+        )
+        
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+    
+    @discord.ui.button(label="← Back to Menu", style=discord.ButtonStyle.secondary, row=1)
+    async def back_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        embed = discord.Embed(
+            title="🚀 BRRR Bot - Main Menu",
+            description="Choose a category to get started!",
+            color=discord.Color.blue()
+        )
+        view = MainMenuView()
+        await interaction.response.edit_message(embed=embed, view=view)
+
+
+class PersonaMenuView(discord.ui.View):
+    """Persona customization submenu"""
+    
+    def __init__(self):
+        super().__init__(timeout=300)
+    
+    @discord.ui.button(label="View Current Persona", style=discord.ButtonStyle.primary, emoji="🎭")
+    async def view_persona(self, interaction: discord.Interaction, button: discord.ui.Button):
+        memories = await bot.db.get_all_memories(interaction.user.id, interaction.guild.id)
+        
+        if 'persona_instructions' not in memories:
+            await interaction.response.send_message(
+                "You haven't set a custom persona yet! I'm using my default friendly style. 🎭",
+                ephemeral=True
+            )
+            return
+        
+        persona_data = memories['persona_instructions']
+        instructions = persona_data.get('value') if isinstance(persona_data, dict) else persona_data
+        
+        embed = discord.Embed(
+            title="🎭 Your Current Persona",
+            description=instructions,
+            color=discord.Color.purple()
+        )
+        
+        embed.set_footer(text="Use buttons below to change or clear")
+        
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+    
+    @discord.ui.button(label="Concise", style=discord.ButtonStyle.secondary, emoji="⚡")
+    async def preset_concise(self, interaction: discord.Interaction, button: discord.ui.Button):
+        instructions = "Be concise and to-the-point. Keep responses brief and direct."
+        
+        await bot.db.set_memory(
+            user_id=interaction.user.id,
+            guild_id=interaction.guild.id,
+            key='persona_instructions',
+            value=instructions,
+            context='preset: concise'
+        )
+        
+        await interaction.response.send_message(
+            "✅ Persona set to **Concise**! I'll keep it brief.",
+            ephemeral=True
+        )
+    
+    @discord.ui.button(label="Detailed", style=discord.ButtonStyle.secondary, emoji="📚")
+    async def preset_detailed(self, interaction: discord.Interaction, button: discord.ui.Button):
+        instructions = "Be detailed and thorough. Provide comprehensive explanations and examples."
+        
+        await bot.db.set_memory(
+            user_id=interaction.user.id,
+            guild_id=interaction.guild.id,
+            key='persona_instructions',
+            value=instructions,
+            context='preset: detailed'
+        )
+        
+        await interaction.response.send_message(
+            "✅ Persona set to **Detailed**! I'll be thorough.",
+            ephemeral=True
+        )
+    
+    @discord.ui.button(label="Friendly", style=discord.ButtonStyle.secondary, emoji="😊")
+    async def preset_friendly(self, interaction: discord.Interaction, button: discord.ui.Button):
+        instructions = "Be warm, friendly, and encouraging. Use casual language and show enthusiasm."
+        
+        await bot.db.set_memory(
+            user_id=interaction.user.id,
+            guild_id=interaction.guild.id,
+            key='persona_instructions',
+            value=instructions,
+            context='preset: friendly'
+        )
+        
+        await interaction.response.send_message(
+            "✅ Persona set to **Friendly**! Let's chat! 😊",
+            ephemeral=True
+        )
+    
+    @discord.ui.button(label="Professional", style=discord.ButtonStyle.secondary, emoji="💼")
+    async def preset_professional(self, interaction: discord.Interaction, button: discord.ui.Button):
+        instructions = "Be professional and formal. Use proper terminology and maintain a business-like tone."
+        
+        await bot.db.set_memory(
+            user_id=interaction.user.id,
+            guild_id=interaction.guild.id,
+            key='persona_instructions',
+            value=instructions,
+            context='preset: professional'
+        )
+        
+        await interaction.response.send_message(
+            "✅ Persona set to **Professional**! Ready to assist.",
+            ephemeral=True
+        )
+    
+    @discord.ui.button(label="← Back to Menu", style=discord.ButtonStyle.secondary, row=2)
+    async def back_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        embed = discord.Embed(
+            title="🚀 BRRR Bot - Main Menu",
+            description="Choose a category to get started!",
+            color=discord.Color.blue()
+        )
+        view = MainMenuView()
+        await interaction.response.edit_message(embed=embed, view=view)
+
+
+@bot.tree.command(name="menu", description="Interactive menu to access all bot features")
+async def menu_command(interaction: discord.Interaction):
+    """Show the main interactive menu"""
+    embed = discord.Embed(
+        title="🚀 BRRR Bot - Main Menu",
+        description="Choose a category to get started!\n\nClick the buttons below to explore features:",
+        color=discord.Color.blue()
+    )
+    
+    embed.add_field(
+        name="📋 Projects",
+        value="Start, manage, and track projects",
+        inline=True
+    )
+    
+    embed.add_field(
+        name="💡 Ideas",
+        value="Capture and browse ideas",
+        inline=True
+    )
+    
+    embed.add_field(
+        name="📅 Weekly",
+        value="Weekly stats and summaries",
+        inline=True
+    )
+    
+    embed.add_field(
+        name="💬 Chat & Memory",
+        value="Manage memories and chat",
+        inline=True
+    )
+    
+    embed.add_field(
+        name="🎭 Persona",
+        value="Customize bot personality",
+        inline=True
+    )
+    
+    embed.add_field(
+        name="❓ Help",
+        value="View full command list",
+        inline=True
+    )
+    
+    embed.set_footer(text="Tip: Use /menu anytime for quick access!")
+    
+    view = MainMenuView()
+    await interaction.response.send_message(embed=embed, view=view)
+
+
 @bot.tree.command(name="help", description="Show all available commands")
 async def help_command(interaction: discord.Interaction):
     embed = discord.Embed(
         title="🚀 BRRR Bot Commands",
         description="Your weekly project planning assistant! Click buttons for interactive features.",
         color=discord.Color.blue()
+    )
+    
+    embed.add_field(
+        name="🎯 Quick Start",
+        value="Use `/menu` for an interactive guide to all features!",
+        inline=False
     )
     
     embed.add_field(
